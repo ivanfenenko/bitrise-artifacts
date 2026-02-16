@@ -20,6 +20,7 @@ tokio = { version = "1", features = ["full"] }
 anyhow = "1"
 thiserror = "1"
 dirs = "5"
+apk-info = "1.0.9"
 
 [features]
 default = ["custom-protocol"]

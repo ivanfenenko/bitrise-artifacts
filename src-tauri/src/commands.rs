@@ -99,6 +99,16 @@ pub async fn install_apk(
 }
 
 #[tauri::command]
+pub async fn install_and_launch_apk(
+    apkPath: String,
+    deviceId: Option<String>,
+) -> Result<String, String> {
+    adb::install_and_launch_apk(&apkPath, deviceId.as_deref())
+        .await
+        .map_err(|e: anyhow::Error| e.to_string())
+}
+
+#[tauri::command]
 pub async fn save_to_downloads(
     cachePath: String,
     fileName: String,
@@ -140,7 +150,13 @@ pub async fn save_to_downloads(
 
 #[tauri::command]
 pub async fn open_path(path: String) -> Result<(), String> {
-    if !std::path::Path::new(&path).exists() {
+    let is_url = path.starts_with("http://")
+        || path.starts_with("https://")
+        || path.starts_with("mailto:")
+        || path.starts_with("tel:")
+        || path.starts_with("file://");
+
+    if !is_url && !std::path::Path::new(&path).exists() {
         return Err("File not found".to_string());
     }
 

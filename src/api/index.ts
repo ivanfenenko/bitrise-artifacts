@@ -86,12 +86,27 @@ export const api = {
     return client.downloadArtifact(appSlug, buildSlug, artifactSlug, fileName);
   },
 
+  async getArtifactDownloadUrl(appSlug: string, buildSlug: string, artifactSlug: string): Promise<string> {
+    if (!cachedToken) {
+      throw new Error("No API token available. Please set token first via getApps()");
+    }
+    const client = new BitriseClient(cachedToken);
+    return client.getArtifactDownloadUrl(appSlug, buildSlug, artifactSlug);
+  },
+
   async getConnectedDevices(): Promise<Device[]> {
     return invokeWithLogging("get_connected_devices");
   },
 
   async installApk(apkPath: string, deviceId?: string): Promise<string> {
     return invokeWithLogging("install_apk", {
+      apkPath,
+      deviceId,
+    });
+  },
+
+  async installAndLaunchApk(apkPath: string, deviceId?: string): Promise<string> {
+    return invokeWithLogging("install_and_launch_apk", {
       apkPath,
       deviceId,
     });

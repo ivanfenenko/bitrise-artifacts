@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::process::Command;
+use apk_info::Apk;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Device {
@@ -57,4 +58,43 @@ pub async fn install_apk(apk_path: &str, device_id: Option<&str>) -> anyhow::Res
         let stderr = String::from_utf8_lossy(&output.stderr);
         anyhow::bail!("Installation failed: {}", stderr);
     }
+}
+
+fn get_package_name(apk_path: &str) -> anyhow::Result<String> {
+    let apk = Apk::new(apk_path).map_err(|e| anyhow::anyhow!("Failed to read APK: {}", e))?;
+    let package = apk.get_package_name().ok_or_else(|| anyhow::anyhow!("Package name not found in APK"))?;
+    Ok(package)
+}
+
+fn launch_package(package_name: &str, device_id: Option<&str>) -> anyhow::Result<String> {
+    let mut cmd = Command::new("adb");
+
+    if let Some(id) = device_id {
+        cmd.args(["-s", id]);
+    }
+
+    cmd.args([
+        "shell",
+        "monkey",
+        "-p",
+        package_name,
+        "-c",
+        "android.intent.category.LAUNCHER",
+        "1",
+    ]);
+
+    let output = cmd.output()?;
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("Launch failed: {}", stderr);
+    }
+}
+
+pub async fn install_and_launch_apk(apk_path: &str, device_id: Option<&str>) -> anyhow::Result<String> {
+    let install_output = install_apk(apk_path, device_id).await?;
+    let package_name = get_package_name(apk_path)?;
+    let launch_output = launch_package(&package_name, device_id)?;
+    Ok(format!("Installed and launched {}. {} {}", package_name, install_output.trim(), launch_output.trim()))
 }

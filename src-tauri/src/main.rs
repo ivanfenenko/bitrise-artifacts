@@ -25,6 +25,7 @@ fn main() {
             commands::download_artifact,
             commands::get_connected_devices,
             commands::install_apk,
+            commands::install_and_launch_apk,
             commands::save_to_downloads,
             commands::open_path,
             commands::save_settings,

@@ -143,28 +143,7 @@ export class BitriseClient {
     const cacheFilePath = `${cacheDirName}/${fileName}`;
     console.log('[BitriseClient] Downloading artifact to cache:', cacheFilePath);
 
-    // Step 1: Get artifact metadata with expiring download URL
-    const metadataUrl = `${BITRISE_API_BASE}/apps/${appSlug}/builds/${buildSlug}/artifacts/${artifactSlug}`;
-    const metadataResponse = await tauriFetch(metadataUrl, {
-      method: 'GET',
-      headers: {
-        'Authorization': `token ${this.token}`,
-      },
-    });
-
-    if (!metadataResponse.ok) {
-      throw new Error(`Failed to get artifact info: ${metadataResponse.status}`);
-    }
-
-    const metadataJson = await metadataResponse.json() as {
-      data: { expiring_download_url?: string }
-    };
-    const downloadUrl = metadataJson.data.expiring_download_url;
-
-    if (!downloadUrl) {
-      throw new Error('No download URL found in artifact metadata');
-    }
-
+    const downloadUrl = await this.getArtifactDownloadUrl(appSlug, buildSlug, artifactSlug);
     console.log('[BitriseClient] Download URL obtained, fetching artifact...');
 
     // Step 2: Download the actual file
@@ -190,5 +169,34 @@ export class BitriseClient {
     console.log('[BitriseClient] Absolute path:', absolutePath);
 
     return absolutePath;
+  }
+
+  async getArtifactDownloadUrl(
+    appSlug: string,
+    buildSlug: string,
+    artifactSlug: string
+  ): Promise<string> {
+    const metadataUrl = `${BITRISE_API_BASE}/apps/${appSlug}/builds/${buildSlug}/artifacts/${artifactSlug}`;
+    const metadataResponse = await tauriFetch(metadataUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `token ${this.token}`,
+      },
+    });
+
+    if (!metadataResponse.ok) {
+      throw new Error(`Failed to get artifact info: ${metadataResponse.status}`);
+    }
+
+    const metadataJson = await metadataResponse.json() as {
+      data: { expiring_download_url?: string }
+    };
+    const downloadUrl = metadataJson.data.expiring_download_url;
+
+    if (!downloadUrl) {
+      throw new Error('No download URL found in artifact metadata');
+    }
+
+    return downloadUrl;
   }
 }

@@ -203,16 +203,16 @@ export function ArtifactPanel({ build, appSlug, onClose }: ArtifactPanelProps) {
 
   const installApkToDevice = async (apkPath: string, deviceId?: string) => {
     try {
-      await api.installApk(apkPath, deviceId);
+      await api.installAndLaunchApk(apkPath, deviceId);
       setSnackbar({
         type: "success",
-        message: "APK installed successfully.",
+        message: "APK installed and launched.",
       });
     } catch (err) {
       console.error("Install failed:", err);
       setSnackbar({
         type: "error",
-        message: "Failed to install APK: " + (err instanceof Error ? err.message : String(err)),
+        message: "Failed to install or launch APK: " + (err instanceof Error ? err.message : String(err)),
       });
     }
   };
@@ -274,6 +274,7 @@ export function ArtifactPanel({ build, appSlug, onClose }: ArtifactPanelProps) {
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   };
+
 
   if (!build) {
     return (
@@ -340,6 +341,9 @@ export function ArtifactPanel({ build, appSlug, onClose }: ArtifactPanelProps) {
           <div className="space-y-3">
             {artifacts.map((artifact, index) => {
               const isApk = artifact.title?.toLowerCase().endsWith(".apk");
+              const isHtmlReport = artifact.artifact_type?.toLowerCase() === "html_report"
+                || artifact.title?.toLowerCase().endsWith(".html")
+                || artifact.title?.toLowerCase().endsWith(".htm");
               const isCached = artifact.slug ? !!downloadedArtifacts[artifact.slug] : false;
 
               return (
@@ -370,7 +374,30 @@ export function ArtifactPanel({ build, appSlug, onClose }: ArtifactPanelProps) {
                   </div>
 
                   <div className="mt-4 flex gap-2">
-                    {!isCached ? (
+                    {isHtmlReport ? (
+                      <button
+                        onClick={async () => {
+                          if (!appSlug || !build?.slug || !artifact.slug) {
+                            setSnackbar({ type: "error", message: "Missing data — cannot open report." });
+                            return;
+                          }
+                          try {
+                            const url = await api.getArtifactDownloadUrl(appSlug, build.slug, artifact.slug);
+                            await api.openPath(url);
+                          } catch (err) {
+                            console.error("Open report failed:", err);
+                            setSnackbar({
+                              type: "error",
+                              message: "Failed to open report: " + (err instanceof Error ? err.message : String(err)),
+                            });
+                          }
+                        }}
+                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-surface hover:bg-surface-hover text-text-primary text-sm font-medium rounded-lg transition-colors"
+                      >
+                        <ExternalLink size={16} />
+                        Open report
+                      </button>
+                    ) : !isCached ? (
                       <button
                         onClick={() => handleDownload(artifact)}
                         disabled={!artifact.slug || !artifact.title || downloadingSlug === artifact.slug}
