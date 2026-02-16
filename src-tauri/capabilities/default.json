@@ -1,0 +1,23 @@
+{
+  "$schema": "https://tauri.app/schema/capability.json",
+  "identifier": "default",
+  "description": "Default permissions for the application",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "shell:allow-open",
+    "fs:default",
+    "fs:allow-read",
+    "fs:allow-write",
+    "fs:allow-exists",
+    "fs:allow-mkdir",
+    "http:default",
+    {
+      "identifier": "http:allow-fetch",
+      "allow": [
+        { "url": "https://api.bitrise.io/**" },
+        { "url": "https://**" }
+      ]
+    }
+  ]
+}

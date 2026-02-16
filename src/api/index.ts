@@ -1,9 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { App, Build, Artifact, Device, Settings } from "../types";
+import { BitriseClient } from "./bitrise";
 
-// Helper to log API calls
+// Cache the API token for BitriseClient reuse
+let cachedToken: string | null = null;
+
+// Helper to log API calls (used for Rust commands only)
 async function invokeWithLogging<T>(
-  command: string, 
+  command: string,
   args: Record<string, unknown> = {}
 ): Promise<T> {
   console.log(`[API Request] ${command}`, args);
@@ -18,12 +22,33 @@ async function invokeWithLogging<T>(
 }
 
 export const api = {
+  // Bitrise API calls - now using BitriseClient in React
   async getApps(token: string): Promise<App[]> {
-    return invokeWithLogging("get_apps", { token });
+    console.log("[API] getApps called");
+    console.log("[API] Token length:", token.length);
+    console.log("[API] Token (first 10 chars):", token.substring(0, 10) + '...');
+
+    try {
+      cachedToken = token; // Cache token for subsequent calls
+      const client = new BitriseClient(token);
+      console.log("[API] BitriseClient created, calling getApps...");
+      const result = await client.getApps();
+      console.log("[API] getApps returned", result.length, "apps");
+      return result;
+    } catch (error) {
+      console.error("[API] Error in getApps:", error);
+      console.error("[API] Error message:", error instanceof Error ? error.message : String(error));
+      throw error;
+    }
   },
 
   async getBuilds(appSlug: string): Promise<Build[]> {
-    const builds = await invokeWithLogging<Build[]>("get_builds", { appSlug });
+    console.log("[API] getBuilds called for app:", appSlug);
+    if (!cachedToken) {
+      throw new Error("No API token available. Please set token first via getApps()");
+    }
+    const client = new BitriseClient(cachedToken);
+    const builds = await client.getBuilds(appSlug);
     console.log("Builds received in frontend:", builds);
     if (builds && builds.length > 0) {
       console.log("First build workflow:", builds[0].workflow);
@@ -32,10 +57,12 @@ export const api = {
   },
 
   async getArtifacts(appSlug: string, buildSlug: string): Promise<Artifact[]> {
-    return invokeWithLogging("get_artifacts", { 
-      appSlug, 
-      buildSlug 
-    });
+    console.log("[API] getArtifacts called for build:", buildSlug);
+    if (!cachedToken) {
+      throw new Error("No API token available. Please set token first via getApps()");
+    }
+    const client = new BitriseClient(cachedToken);
+    return client.getArtifacts(appSlug, buildSlug);
   },
 
   async downloadArtifact(
@@ -44,12 +71,12 @@ export const api = {
     artifactSlug: string,
     fileName: string
   ): Promise<string> {
-    return invokeWithLogging("download_artifact", {
-      appSlug,
-      buildSlug,
-      artifactSlug,
-      fileName,
-    });
+    console.log("[API] downloadArtifact called for:", fileName);
+    if (!cachedToken) {
+      throw new Error("No API token available. Please set token first via getApps()");
+    }
+    const client = new BitriseClient(cachedToken);
+    return client.downloadArtifact(appSlug, buildSlug, artifactSlug, fileName);
   },
 
   async getConnectedDevices(): Promise<Device[]> {

@@ -1,0 +1,22 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="180" fill="#6B46C1"/>
+
+  <!-- Package/Box icon -->
+  <g transform="translate(200, 200)">
+    <!-- Box base -->
+    <path d="M 312 468 L 312 624 L 156 546 L 156 390 Z" fill="#9F7AEA" opacity="0.8"/>
+    <path d="M 312 468 L 468 546 L 468 702 L 312 624 Z" fill="#B794F4" opacity="0.8"/>
+    <path d="M 156 390 L 312 312 L 468 390 L 312 468 Z" fill="#D6BCFA"/>
+
+    <!-- Top flaps -->
+    <path d="M 234 351 L 312 312 L 312 390 L 234 429 Z" fill="#E9D8FD" opacity="0.6"/>
+    <path d="M 390 351 L 312 312 L 312 390 L 390 429 Z" fill="#FAF5FF" opacity="0.6"/>
+
+    <!-- Accent line -->
+    <line x1="312" y1="312" x2="312" y2="468" stroke="#553C9A" stroke-width="4"/>
+  </g>
+
+  <!-- Letter B for Bitrise -->
+  <text x="512" y="720" font-family="Arial, sans-serif" font-size="200" font-weight="bold" fill="white" text-anchor="middle">B</text>
+</svg>
