@@ -58,8 +58,15 @@ export const api = {
 
   async installApk(apkPath: string, deviceId?: string): Promise<string> {
     return invokeWithLogging("install_apk", {
-      apk_path: apkPath,
-      device_id: deviceId,
+      apkPath,
+      deviceId,
+    });
+  },
+
+  async saveToDownloads(cachePath: string, fileName: string): Promise<string> {
+    return invokeWithLogging("save_to_downloads", {
+      cachePath,
+      fileName,
     });
   },
 

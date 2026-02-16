@@ -144,16 +144,19 @@ impl BitriseClient {
         artifact_slug: &str,
         file_name: &str,
     ) -> anyhow::Result<String> {
-        // Get the Downloads folder
+        // Get the cache directory
         let home = dirs::home_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not get home directory"))?;
-        let download_dir = home.join("Downloads");
+        let cache_dir = home.join(".bitrise-artifacts").join("cache");
+        
+        // Ensure cache directory exists
+        tokio::fs::create_dir_all(&cache_dir).await?;
         
         // Create full path
-        let save_path = download_dir.join(file_name);
+        let save_path = cache_dir.join(file_name);
         let save_path_str = save_path.to_string_lossy().to_string();
         
-        println!("Downloading artifact to: {}", save_path_str);
+        println!("Downloading artifact to cache: {}", save_path_str);
         
         let url = format!(
             "{}/apps/{}/builds/{}/artifacts/{}",

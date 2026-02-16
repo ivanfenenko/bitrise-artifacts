@@ -94,6 +94,46 @@ pub async fn install_apk(
 }
 
 #[tauri::command]
+pub async fn save_to_downloads(
+    cachePath: String,
+    fileName: String,
+) -> Result<String, String> {
+    let home = dirs::home_dir()
+        .ok_or_else(|| "Could not get home directory".to_string())?;
+    let download_dir = home.join("Downloads");
+    
+    // Ensure Downloads directory exists
+    tokio::fs::create_dir_all(&download_dir)
+        .await
+        .map_err(|e| format!("Failed to create Downloads directory: {}", e))?;
+    
+    let requested_path = download_dir.join(&fileName);
+    let (base, ext) = match fileName.rsplit_once('.') {
+        Some((b, e)) => (b.to_string(), Some(e.to_string())),
+        None => (fileName.clone(), None),
+    };
+    let mut dest_path = requested_path.clone();
+    let mut counter = 1;
+    while dest_path.exists() {
+        let candidate_name = if let Some(ref extension) = ext {
+            format!("{} ({}).{}", base, counter, extension)
+        } else {
+            format!("{} ({})", base, counter)
+        };
+        dest_path = download_dir.join(candidate_name);
+        counter += 1;
+    }
+    let dest_path_str = dest_path.to_string_lossy().to_string();
+    
+    // Copy file from cache to Downloads
+    tokio::fs::copy(&cachePath, &dest_path)
+        .await
+        .map_err(|e| format!("Failed to copy file to Downloads: {}", e))?;
+    
+    Ok(dest_path_str)
+}
+
+#[tauri::command]
 pub async fn save_settings(settings: Settings) -> Result<(), String> {
     fs::save_settings(&settings).await.map_err(|e: anyhow::Error| e.to_string())
 }
