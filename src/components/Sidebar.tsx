@@ -16,6 +16,7 @@ interface SidebarProps {
   onClearBranchFilter: () => void;
   statusFilter: StatusFilter;
   onStatusFilterChange: (filter: StatusFilter) => void;
+  width: number;
 }
 
 export function Sidebar({
@@ -31,6 +32,7 @@ export function Sidebar({
   onClearBranchFilter,
   statusFilter,
   onStatusFilterChange,
+  width,
 }: SidebarProps) {
   const statusOptions: { value: StatusFilter; label: string }[] = [
     { value: "all", label: "All" },
@@ -38,7 +40,7 @@ export function Sidebar({
     { value: "failed", label: "Failed" },
   ];
   return (
-    <aside className="w-64 bg-surface border-r border-border flex flex-col">
+    <aside className="bg-surface border-r border-border flex flex-col shrink-0" style={{ width }}>
       {/* Apps section */}
       <div className="p-4 border-b border-border flex items-center justify-between">
         <h2 className="text-xs font-semibold text-text-muted uppercase tracking-wider">

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { api, setCachedToken } from "./api";
 import { App as AppType, Build, Settings } from "./types";
 import { Sidebar } from "./components/Sidebar";
@@ -24,6 +24,41 @@ function App() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
+
+  // Resizable panels
+  const [sidebarWidth, setSidebarWidth] = useState(256);
+  const [artifactWidth, setArtifactWidth] = useState(450);
+  const dragging = useRef<"sidebar" | "artifact" | null>(null);
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (dragging.current === "sidebar") {
+      setSidebarWidth(Math.max(180, Math.min(400, e.clientX)));
+    } else if (dragging.current === "artifact") {
+      const fromRight = window.innerWidth - e.clientX;
+      setArtifactWidth(Math.max(280, Math.min(700, fromRight)));
+    }
+  }, []);
+
+  const handleMouseUp = useCallback(() => {
+    dragging.current = null;
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [handleMouseMove, handleMouseUp]);
+
+  const startDrag = (panel: "sidebar" | "artifact") => {
+    dragging.current = panel;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
 
   useEffect(() => {
     loadSettings();
@@ -237,6 +272,12 @@ function App() {
           onClearBranchFilter={handleClearBranchFilter}
           statusFilter={statusFilter}
           onStatusFilterChange={setStatusFilter}
+          width={sidebarWidth}
+        />
+        {/* Sidebar resize handle */}
+        <div
+          onMouseDown={() => startDrag("sidebar")}
+          className="w-1 hover:w-1 cursor-col-resize bg-transparent hover:bg-primary/30 transition-colors shrink-0"
         />
 
         <main className="flex-1 flex min-w-0">
@@ -268,7 +309,7 @@ function App() {
             </div>
           ) : (
             <>
-              <div className="flex-1 min-w-0 border-r border-border">
+              <div className="flex-1 min-w-0">
                 <BuildList
                   builds={builds}
                   appSlug={selectedApp?.slug}
@@ -287,7 +328,12 @@ function App() {
                 />
               </div>
 
-              <div className="w-[450px] min-w-[450px]">
+              {/* Artifact resize handle */}
+              <div
+                onMouseDown={() => startDrag("artifact")}
+                className="w-1 hover:w-1 cursor-col-resize bg-transparent hover:bg-primary/30 transition-colors shrink-0"
+              />
+              <div className="shrink-0" style={{ width: artifactWidth }}>
                 {selectedBuild?.slug && (
                   <ArtifactPanel
                     build={selectedBuild}
