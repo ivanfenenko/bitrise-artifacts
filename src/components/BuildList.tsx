@@ -128,6 +128,7 @@ export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh, wat
   const [showBranchPicker, setShowBranchPicker] = useState(false);
   const [allBranches, setAllBranches] = useState<string[]>([]);
   const [branchSearch, setBranchSearch] = useState("");
+  const [buildSearch, setBuildSearch] = useState("");
   const [branchesLoading, setBranchesLoading] = useState(false);
   const branchPickerRef = useRef<HTMLDivElement>(null);
 
@@ -172,10 +173,27 @@ export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh, wat
   }, [allBranches, branchSearch]);
 
   const groups = useMemo(() => groupBuilds(builds), [builds]);
-  const filteredGroups = useMemo(
-    () => groups.filter((g) => matchesStatusFilter(g, statusFilter)),
-    [groups, statusFilter]
-  );
+  const filteredGroups = useMemo(() => {
+    const statusFiltered = groups.filter((g) => matchesStatusFilter(g, statusFilter));
+    if (!buildSearch.trim()) return statusFiltered;
+    const q = buildSearch.toLowerCase();
+    return statusFiltered.filter((group) => {
+      const buildsToSearch = group.type === "pipeline" ? group.builds : [group.build];
+      return buildsToSearch.some((build) => {
+        const fields = [
+          build.workflow,
+          build.branch,
+          build.triggered_by,
+          build.commit_message,
+          build.commit_hash,
+          build.status_text,
+          build.pull_request_id?.toString(),
+          build.build_number?.toString(),
+        ];
+        return fields.some((value) => value && value.toLowerCase().includes(q));
+      });
+    });
+  }, [groups, statusFilter, buildSearch]);
 
   const togglePipeline = (buildNumber: number) => {
     setExpandedPipelines((prev) => {
@@ -461,7 +479,7 @@ export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh, wat
 
   return (
     <div className="h-full flex flex-col bg-background">
-      <div className="h-14 border-b border-border px-4 flex items-center justify-between">
+      <div className="h-14 border-b border-border px-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <h2 className="font-semibold text-text-primary">Builds</h2>
           {activeBranchFilter && (
@@ -477,7 +495,26 @@ export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh, wat
             </div>
           )}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
+          <div className="relative w-56">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
+            <input
+              type="text"
+              value={buildSearch}
+              onChange={(e) => setBuildSearch(e.target.value)}
+              placeholder="Search builds..."
+              className="w-full pl-8 pr-3 py-1.5 bg-background border border-border rounded-md text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-primary"
+            />
+            {buildSearch && (
+              <button
+                onClick={() => setBuildSearch("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary"
+                title="Clear search"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
           <div className="relative" ref={branchPickerRef}>
             <button
               onClick={() => setShowBranchPicker(!showBranchPicker)}

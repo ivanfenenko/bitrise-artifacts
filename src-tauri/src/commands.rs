@@ -20,6 +20,16 @@ pub struct Settings {
     pub watchlist_apps: Vec<bitrise::App>,
     #[serde(default)]
     pub watchlist_branches: std::collections::HashMap<String, Vec<String>>,
+    #[serde(default)]
+    pub downloaded_artifacts: std::collections::HashMap<String, DownloadedArtifactInfo>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct DownloadedArtifactInfo {
+    pub path: String,
+    pub fileName: String,
+    #[serde(default)]
+    pub downloadPath: Option<String>,
 }
 
 #[tauri::command]

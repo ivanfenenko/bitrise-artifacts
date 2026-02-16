@@ -7,6 +7,32 @@ pub struct Device {
     pub id: String,
     pub model: String,
     pub status: String,
+    pub manufacturer: Option<String>,
+    pub device: Option<String>,
+    pub api_level: Option<String>,
+    pub is_emulator: Option<bool>,
+}
+
+fn get_prop(device_id: &str, prop: &str) -> Option<String> {
+    let output = Command::new("adb")
+        .args(["-s", device_id, "shell", "getprop", prop])
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if value.is_empty() { None } else { Some(value) }
+}
+
+fn is_emulator(device_id: &str) -> Option<bool> {
+    if device_id.starts_with("emulator-") || device_id.starts_with("127.0.0.1:") {
+        return Some(true);
+    }
+    let kernel_qemu = get_prop(device_id, "ro.kernel.qemu");
+    kernel_qemu.map(|v| v == "1")
 }
 
 pub async fn get_devices() -> anyhow::Result<Vec<Device>> {
@@ -33,7 +59,19 @@ pub async fn get_devices() -> anyhow::Result<Vec<Device>> {
                 .unwrap_or_else(|| "Unknown".to_string());
 
             if status == "device" {
-                devices.push(Device { id, model, status });
+                let manufacturer = get_prop(&id, "ro.product.manufacturer");
+                let device_name = get_prop(&id, "ro.product.device");
+                let api_level = get_prop(&id, "ro.build.version.sdk");
+                let emulator_flag = is_emulator(&id);
+                devices.push(Device {
+                    id,
+                    model,
+                    status,
+                    manufacturer,
+                    device: device_name,
+                    api_level,
+                    is_emulator: emulator_flag,
+                });
             }
         }
     }

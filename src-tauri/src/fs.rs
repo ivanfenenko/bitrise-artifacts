@@ -30,6 +30,7 @@ pub async fn load_settings() -> anyhow::Result<Settings> {
             selected_app_slug: None,
             watchlist_apps: Vec::new(),
             watchlist_branches: std::collections::HashMap::new(),
+            downloaded_artifacts: std::collections::HashMap::new(),
         });
     }
     

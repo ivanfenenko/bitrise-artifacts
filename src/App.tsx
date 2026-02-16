@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api, setCachedToken } from "./api";
-import { App as AppType, Build, Settings } from "./types";
+import { App as AppType, Build, DownloadedArtifactInfo, Settings } from "./types";
 import { Sidebar } from "./components/Sidebar";
 import { BuildList } from "./components/BuildList";
 import { ArtifactPanel } from "./components/ArtifactPanel";
@@ -17,6 +17,7 @@ function App() {
   const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
   const [builds, setBuilds] = useState<Build[]>([]);
   const [selectedBuild, setSelectedBuild] = useState<Build | null>(null);
+  const [downloadedArtifacts, setDownloadedArtifacts] = useState<Record<string, DownloadedArtifactInfo>>({});
   const [loading, setLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showAddApp, setShowAddApp] = useState(false);
@@ -89,6 +90,10 @@ function App() {
       setWatchlistApps(apps);
       setWatchlistBranches(branches);
 
+      if (saved.downloaded_artifacts) {
+        setDownloadedArtifacts(saved.downloaded_artifacts);
+      }
+
       if (saved.api_token) {
         setCachedToken(saved.api_token);
 
@@ -145,6 +150,11 @@ function App() {
     setSettings(newSettings);
     api.saveSettings(newSettings);
   };
+
+  useEffect(() => {
+    if (!settings.api_token && !settings.selected_app_slug && !settings.watchlist_apps) return;
+    persistSettings({ downloaded_artifacts: downloadedArtifacts });
+  }, [downloadedArtifacts, settings.api_token, settings.selected_app_slug, settings.watchlist_apps]);
 
   const handleAppSelect = (app: AppType) => {
     setSelectedApp(app);
@@ -362,6 +372,8 @@ function App() {
                     <ArtifactPanel
                       build={selectedBuild}
                       appSlug={selectedApp?.slug}
+                      downloadedArtifacts={downloadedArtifacts}
+                      onUpdateDownloadedArtifacts={setDownloadedArtifacts}
                       onClose={() => setSelectedBuild(null)}
                     />
                   </div>

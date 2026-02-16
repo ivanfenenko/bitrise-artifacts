@@ -30,7 +30,7 @@ export function DeviceBar() {
   };
 
   return (
-    <div className="h-12 bg-surface border-t border-border flex items-center px-4">
+    <div className="h-12 bg-surface border-t border-border flex items-center px-4 relative">
       <button
         onClick={() => setExpanded(!expanded)}
         className="flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary transition-colors"
@@ -57,18 +57,42 @@ export function DeviceBar() {
         )}
       </button>
 
-      {expanded && devices.length > 0 && (
-        <div className="ml-4 flex items-center gap-4">
-          {devices.map((device) => (
-            <div
-              key={device.id}
-              className="flex items-center gap-2 px-3 py-1 bg-background rounded-full border border-border"
-            >
-              <div className="w-2 h-2 bg-success rounded-full" />
-              <span className="text-xs text-text-secondary">{device.model}</span>
-              <span className="text-xs text-text-muted">({device.id})</span>
+      {expanded && (
+        <div className="absolute bottom-full left-4 mb-2 w-[420px] bg-surface border border-border rounded-lg shadow-xl z-50">
+          {devices.length === 0 ? (
+            <div className="p-3 text-xs text-text-muted">No devices connected</div>
+          ) : (
+            <div className="p-2 space-y-2">
+              {devices.map((device) => (
+                <div
+                  key={device.id}
+                  className="flex items-center justify-between gap-3 px-3 py-2 bg-background rounded-md border border-border"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-2 h-2 bg-success rounded-full shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-xs text-text-secondary truncate">
+                        {device.manufacturer ? `${device.manufacturer} ` : ""}{device.model}
+                      </div>
+                      <div className="text-[10px] text-text-muted truncate">{device.id}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {device.is_emulator != null && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-hover text-text-muted">
+                        {device.is_emulator ? "Emulator" : "Device"}
+                      </span>
+                    )}
+                    {device.api_level && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-hover text-text-muted">
+                        API {device.api_level}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
       )}
     </div>

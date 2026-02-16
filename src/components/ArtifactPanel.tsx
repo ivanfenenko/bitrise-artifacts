@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Build, Artifact, Device } from "../types";
+import { useState, useEffect, type Dispatch, type SetStateAction } from "react";
+import { Build, Artifact, Device, DownloadedArtifactInfo } from "../types";
 import { api } from "../api";
 import { format } from "date-fns";
 import {
@@ -16,18 +16,17 @@ import {
 interface ArtifactPanelProps {
   build: Build | null;
   appSlug?: string;
+  downloadedArtifacts: Record<string, DownloadedArtifactInfo>;
+  onUpdateDownloadedArtifacts: Dispatch<SetStateAction<Record<string, DownloadedArtifactInfo>>>;
   onClose?: () => void;
 }
 
-export function ArtifactPanel({ build, appSlug, onClose }: ArtifactPanelProps) {
+export function ArtifactPanel({ build, appSlug, downloadedArtifacts, onUpdateDownloadedArtifacts, onClose }: ArtifactPanelProps) {
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [loading, setLoading] = useState(false);
   const [downloadingSlug, setDownloadingSlug] = useState<string | null>(null);
   const [savingSlug, setSavingSlug] = useState<string | null>(null);
   const [installingSlug, setInstallingSlug] = useState<string | null>(null);
-  const [downloadedArtifacts, setDownloadedArtifacts] = useState<
-    Record<string, { path: string; fileName: string; downloadPath?: string }>
-  >({});
   const [deviceOptions, setDeviceOptions] = useState<Device[]>([]);
   const [devicePicker, setDevicePicker] = useState<
     { artifactSlug: string; apkPath: string } | null
@@ -104,6 +103,8 @@ export function ArtifactPanel({ build, appSlug, onClose }: ArtifactPanelProps) {
       return;
     }
 
+    const artifactKey = `${appSlug}:${build.slug}:${artifact.slug}`;
+
     const rawName = artifact.title || `artifact-${artifact.slug}`;
     const filename = formatFilename(build.branch, rawName);
     setDownloadingSlug(artifact.slug);
@@ -114,15 +115,15 @@ export function ArtifactPanel({ build, appSlug, onClose }: ArtifactPanelProps) {
         artifact.slug,
         filename
       );
-      setDownloadedArtifacts(prev => ({
+      onUpdateDownloadedArtifacts(prev => ({
         ...prev,
-        [artifact.slug as string]: { path: savePath, fileName: filename },
+        [artifactKey]: { path: savePath, fileName: filename },
       }));
       try {
         const downloadsPath = await api.saveToDownloads(savePath, filename);
-        setDownloadedArtifacts(prev => ({
+        onUpdateDownloadedArtifacts(prev => ({
           ...prev,
-          [artifact.slug as string]: {
+          [artifactKey]: {
             path: savePath,
             fileName: filename,
             downloadPath: downloadsPath,
@@ -150,7 +151,9 @@ export function ArtifactPanel({ build, appSlug, onClose }: ArtifactPanelProps) {
 
   const handleSaveToDownloads = async (artifact: Artifact) => {
     if (!artifact.slug) return;
-    const cached = downloadedArtifacts[artifact.slug];
+    const cached = appSlug && build?.slug
+      ? downloadedArtifacts[`${appSlug}:${build.slug}:${artifact.slug}`]
+      : undefined;
     if (!cached) {
       setSnackbar({ type: "error", message: "Download the artifact first." });
       return;
@@ -175,7 +178,9 @@ export function ArtifactPanel({ build, appSlug, onClose }: ArtifactPanelProps) {
   };
 
   const handleOpenDownloaded = async (artifact: Artifact) => {
-    const cached = artifact.slug ? downloadedArtifacts[artifact.slug] : undefined;
+    const cached = artifact.slug && appSlug && build?.slug
+      ? downloadedArtifacts[`${appSlug}:${build.slug}:${artifact.slug}`]
+      : undefined;
     const targetPath = cached?.downloadPath || cached?.path;
     if (!targetPath) {
       setSnackbar({ type: "error", message: "No downloaded file found to open." });
@@ -187,10 +192,10 @@ export function ArtifactPanel({ build, appSlug, onClose }: ArtifactPanelProps) {
     } catch (err) {
       console.error("Open failed:", err);
       const message = err instanceof Error ? err.message : String(err);
-      if (message.toLowerCase().includes("not found") && artifact.slug) {
-        setDownloadedArtifacts(prev => {
+      if (message.toLowerCase().includes("not found") && artifact.slug && appSlug && build?.slug) {
+        onUpdateDownloadedArtifacts(prev => {
           const next = { ...prev };
-          delete next[artifact.slug as string];
+          delete next[`${appSlug}:${build.slug}:${artifact.slug}`];
           return next;
         });
       }
@@ -219,7 +224,9 @@ export function ArtifactPanel({ build, appSlug, onClose }: ArtifactPanelProps) {
 
   const handleInstall = async (artifact: Artifact) => {
     if (!artifact.slug) return;
-    const cached = downloadedArtifacts[artifact.slug];
+    const cached = appSlug && build?.slug
+      ? downloadedArtifacts[`${appSlug}:${build.slug}:${artifact.slug}`]
+      : undefined;
     if (!cached) {
       setSnackbar({ type: "error", message: "Download the artifact first." });
       return;
@@ -344,7 +351,9 @@ export function ArtifactPanel({ build, appSlug, onClose }: ArtifactPanelProps) {
               const isHtmlReport = artifact.artifact_type?.toLowerCase() === "html_report"
                 || artifact.title?.toLowerCase().endsWith(".html")
                 || artifact.title?.toLowerCase().endsWith(".htm");
-              const isCached = artifact.slug ? !!downloadedArtifacts[artifact.slug] : false;
+              const isCached = artifact.slug && appSlug && build?.slug
+                ? !!downloadedArtifacts[`${appSlug}:${build.slug}:${artifact.slug}`]
+                : false;
 
               return (
                 <div
@@ -487,14 +496,28 @@ export function ArtifactPanel({ build, appSlug, onClose }: ArtifactPanelProps) {
                   onClick={() => handleSelectDevice(device.id)}
                   className="w-full flex items-center justify-between gap-3 px-3 py-2 bg-background hover:bg-surface-hover border border-border rounded-lg transition-colors"
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
                     <Smartphone size={18} className="text-primary" />
-                    <div className="text-left">
-                      <p className="text-sm font-medium text-text-primary">{device.model}</p>
-                      <p className="text-xs text-text-muted">{device.id}</p>
+                    <div className="text-left min-w-0">
+                      <p className="text-sm font-medium text-text-primary truncate">
+                        {device.manufacturer ? `${device.manufacturer} ` : ""}{device.model}
+                      </p>
+                      <p className="text-xs text-text-muted truncate">{device.id}</p>
                     </div>
                   </div>
-                  <span className="text-xs text-text-secondary">Install</span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {device.is_emulator != null && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-hover text-text-muted">
+                        {device.is_emulator ? "Emulator" : "Device"}
+                      </span>
+                    )}
+                    {device.api_level && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-hover text-text-muted">
+                        API {device.api_level}
+                      </span>
+                    )}
+                    <span className="text-xs text-text-secondary">Install</span>
+                  </div>
                 </button>
               ))}
             </div>

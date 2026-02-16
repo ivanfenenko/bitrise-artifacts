@@ -33,6 +33,16 @@ export interface Device {
   id: string;
   model: string;
   status: string;
+  manufacturer?: string;
+  device?: string;
+  api_level?: string;
+  is_emulator?: boolean;
+}
+
+export interface DownloadedArtifactInfo {
+  path: string;
+  fileName: string;
+  downloadPath?: string;
 }
 
 export interface Settings {
@@ -42,6 +52,7 @@ export interface Settings {
   watchlist_branches?: Record<string, string[]>;
   sidebar_width?: number;
   artifact_width?: number;
+  downloaded_artifacts?: Record<string, DownloadedArtifactInfo>;
 }
 
 export interface GroupedBuilds {
