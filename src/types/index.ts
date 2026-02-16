@@ -10,8 +10,13 @@ export interface Build {
   branch?: string;
   status_text?: string;
   triggered_at?: string;
+  finished_at?: string;
   triggered_by?: string;
   commit_message?: string;
+  commit_hash?: string;
+  pull_request_id?: number;
+  pull_request_target_branch?: string;
+  pipeline_id?: string;
   workflow?: string;
 }
 
@@ -33,6 +38,8 @@ export interface Device {
 export interface Settings {
   api_token: string;
   selected_app_slug?: string;
+  watchlist_apps?: App[];
+  watchlist_branches?: Record<string, string[]>;
 }
 
 export interface GroupedBuilds {

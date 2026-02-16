@@ -1,13 +1,34 @@
+import { open } from "@tauri-apps/plugin-shell";
 import { Build } from "../types";
-import { format } from "date-fns";
-import { useState, useMemo } from "react";
-import { RefreshCw, Clock, User, CheckCircle2, XCircle, Loader2, ChevronRight, ChevronDown, Layers } from "lucide-react";
+import { format, formatDistanceStrict } from "date-fns";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import {
+  RefreshCw, User, CircleCheck, CircleX, Loader2,
+  ChevronRight, ChevronDown, Layers, Bookmark,
+  CircleSlash, CircleDashed, CirclePause,
+  GitBranch, GitCommitHorizontal, Clock, ArrowRight, ExternalLink,
+} from "lucide-react";
+
+type StatusFilter = "all" | "success" | "failed";
+
+interface ContextMenu {
+  x: number;
+  y: number;
+  url: string;
+}
 
 interface BuildListProps {
   builds: Build[];
   selectedBuild: Build | null;
   onSelectBuild: (build: Build) => void;
   onRefresh: () => void;
+  watchedBranches: string[];
+  onAddBranch: (branch: string) => void;
+  statusFilter: StatusFilter;
+  hasMore: boolean;
+  loadingMore: boolean;
+  onLoadMore: () => void;
+  appSlug?: string;
 }
 
 type BuildGroup = { type: "single"; build: Build } | { type: "pipeline"; buildNumber: number; builds: Build[] };
@@ -15,7 +36,6 @@ type BuildGroup = { type: "single"; build: Build } | { type: "pipeline"; buildNu
 function groupBuilds(builds: Build[]): BuildGroup[] {
   const groups: BuildGroup[] = [];
   const byNumber = new Map<number, Build[]>();
-  const noBuildNumber: Build[] = [];
 
   for (const build of builds) {
     if (build.build_number != null) {
@@ -26,19 +46,13 @@ function groupBuilds(builds: Build[]): BuildGroup[] {
         byNumber.set(build.build_number, [build]);
       }
     } else {
-      noBuildNumber.push(build);
+      groups.push({ type: "single", build });
     }
   }
 
-  // Track which builds have been placed into groups
   const processed = new Set<number>();
-
-  // Walk builds in original order, emitting groups at the position of their first build
   for (const build of builds) {
-    if (build.build_number == null) {
-      groups.push({ type: "single", build });
-      continue;
-    }
+    if (build.build_number == null) continue;
     if (processed.has(build.build_number)) continue;
     processed.add(build.build_number);
 
@@ -55,16 +69,74 @@ function groupBuilds(builds: Build[]): BuildGroup[] {
 
 function computePipelineStatus(builds: Build[]): string {
   const statuses = builds.map((b) => b.status_text?.toLowerCase());
-  if (statuses.some((s) => s === "failed")) return "failed";
+  if (statuses.some((s) => s === "failed" || s === "error")) return "failed";
   if (statuses.some((s) => s === "running" || s === "in-progress")) return "running";
+  if (statuses.some((s) => s === "aborted")) return "aborted";
   if (statuses.every((s) => s === "success")) return "success";
+  if (statuses.some((s) => s === "on-hold" || s === "waiting")) return "on-hold";
   return "unknown";
 }
 
-export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh }: BuildListProps) {
+function getGroupStatus(group: BuildGroup): string {
+  if (group.type === "single") return group.build.status_text?.toLowerCase() || "unknown";
+  return computePipelineStatus(group.builds);
+}
+
+function matchesStatusFilter(group: BuildGroup, filter: StatusFilter): boolean {
+  if (filter === "all") return true;
+  const status = getGroupStatus(group);
+  if (filter === "success") return status === "success";
+  return status === "failed" || status === "error";
+}
+
+function getDuration(build: Build): string | null {
+  if (!build.triggered_at || !build.finished_at) return null;
+  try {
+    return formatDistanceStrict(new Date(build.finished_at), new Date(build.triggered_at));
+  } catch {
+    return null;
+  }
+}
+
+function shortHash(hash?: string): string | null {
+  if (!hash) return null;
+  return hash.substring(0, 7);
+}
+
+function statusBarColor(status?: string): string {
+  switch (status?.toLowerCase()) {
+    case "success": return "bg-success";
+    case "failed":
+    case "error": return "bg-error";
+    case "running":
+    case "in-progress": return "bg-warning";
+    case "aborted": return "bg-zinc-500";
+    case "on-hold":
+    case "waiting": return "bg-blue-400";
+    default: return "bg-zinc-600";
+  }
+}
+
+export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh, watchedBranches, onAddBranch, statusFilter, hasMore, loadingMore, onLoadMore, appSlug }: BuildListProps) {
+  const watchedSet = useMemo(() => new Set(watchedBranches), [watchedBranches]);
   const [expandedPipelines, setExpandedPipelines] = useState<Set<number>>(new Set());
+  const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
+
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+
+  useEffect(() => {
+    if (contextMenu) {
+      const handler = () => closeContextMenu();
+      document.addEventListener("click", handler);
+      return () => document.removeEventListener("click", handler);
+    }
+  }, [contextMenu, closeContextMenu]);
 
   const groups = useMemo(() => groupBuilds(builds), [builds]);
+  const filteredGroups = useMemo(
+    () => groups.filter((g) => matchesStatusFilter(g, statusFilter)),
+    [groups, statusFilter]
+  );
 
   const togglePipeline = (buildNumber: number) => {
     setExpandedPipelines((prev) => {
@@ -78,115 +150,257 @@ export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh }: B
     });
   };
 
-  const getStatusIcon = (status?: string) => {
-    switch (status?.toLowerCase()) {
+  const statusIcon = (icon: React.ReactNode, label: string) => (
+    <span className="relative group/status inline-flex">
+      {icon}
+      <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 px-2 py-1 rounded bg-zinc-800 text-white text-xs whitespace-nowrap opacity-0 pointer-events-none group-hover/status:opacity-100 transition-opacity z-10">
+        {label}
+      </span>
+    </span>
+  );
+
+  const getStatusIcon = (status?: string, size = 16) => {
+    const s = status?.toLowerCase();
+    switch (s) {
       case "success":
-        return <CheckCircle2 size={16} className="text-success" />;
+        return statusIcon(<CircleCheck size={size} className="text-success" />, "Success");
       case "failed":
-        return <XCircle size={16} className="text-error" />;
+      case "error":
+        return statusIcon(<CircleX size={size} className="text-error" />, "Failed");
       case "running":
       case "in-progress":
-        return <Loader2 size={16} className="text-warning animate-spin" />;
+        return statusIcon(<Loader2 size={size} className="text-warning animate-spin" />, "Running");
+      case "aborted":
+        return statusIcon(<CircleSlash size={size} className="text-text-muted" />, "Aborted");
+      case "on-hold":
+      case "waiting":
+        return statusIcon(<CirclePause size={size} className="text-blue-400" />, "On Hold");
       default:
-        return <Clock size={16} className="text-text-muted" />;
+        return statusIcon(<CircleDashed size={size} className="text-text-muted" />, status || "Unknown");
     }
   };
 
   const isSelected = (build: Build) =>
     selectedBuild?.slug != null && build.slug != null && selectedBuild.slug === build.slug;
 
-  const renderBuildButton = (build: Build, indented: boolean) => (
-    <button
-      key={build.slug || Math.random()}
-      onClick={() => onSelectBuild(build)}
-      className={`w-full p-3 rounded-lg text-left transition-all border ${
-        indented ? "ml-4 w-[calc(100%-1rem)]" : ""
-      } ${
-        isSelected(build)
-          ? "bg-primary/10 border-primary/50"
-          : "bg-surface border-transparent hover:border-border hover:bg-surface-hover"
-      }`}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2">
-          {getStatusIcon(build.status_text)}
-          <span className="text-sm font-medium text-text-primary">
-            {build.workflow || "Unknown Workflow"}
-          </span>
-        </div>
-        <span className="text-xs text-text-muted">
-          {build.triggered_at
-            ? format(new Date(build.triggered_at), "MMM d, HH:mm")
-            : "Unknown date"}
-        </span>
+  const getBitriseUrl = (build: Build): string | null => {
+    if (!appSlug) return null;
+    if (build.pipeline_id) {
+      return `https://app.bitrise.io/app/${appSlug}/pipelines/${build.pipeline_id}`;
+    }
+    if (build.slug) {
+      return `https://app.bitrise.io/build/${build.slug}`;
+    }
+    return null;
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, url: string | null) => {
+    if (!url) return;
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, url });
+  };
+
+  const renderBranchTag = (branch: string | undefined, targetBranch?: string) => {
+    if (!branch) return null;
+    return (
+      <div className="flex items-center gap-1.5 min-w-0">
+        <GitBranch size={13} className="text-text-muted shrink-0" />
+        <span className="text-xs text-text-secondary truncate">{branch}</span>
+        {targetBranch && (
+          <>
+            <ArrowRight size={11} className="text-text-muted shrink-0" />
+            <span className="text-xs text-text-muted truncate">{targetBranch}</span>
+          </>
+        )}
       </div>
+    );
+  };
 
-      {build.commit_message && (
-        <p className="mt-2 text-xs text-text-secondary truncate">
-          {build.commit_message}
-        </p>
-      )}
+  const renderWatchButton = (branch: string) => {
+    if (watchedSet.has(branch)) return null;
+    return (
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onAddBranch(branch);
+        }}
+        className="flex items-center gap-1 px-2 py-1 rounded-md border border-border text-xs text-text-muted hover:text-primary hover:border-primary/50 hover:bg-primary/10 transition-colors shrink-0"
+        title="Watch this branch"
+      >
+        <Bookmark size={14} />
+        <span>Watch</span>
+      </button>
+    );
+  };
 
-      {build.triggered_by && (
-        <div className="mt-1 flex items-center gap-1 text-xs text-text-muted">
-          <User size={12} />
-          <span>{build.triggered_by}</span>
+  const renderBuildButton = (build: Build, indented: boolean) => {
+    const duration = getDuration(build);
+    const hash = shortHash(build.commit_hash);
+
+    return (
+      <button
+        key={build.slug || Math.random()}
+        onClick={() => onSelectBuild(build)}
+        onContextMenu={(e) => handleContextMenu(e, getBitriseUrl(build))}
+        className={`w-full rounded-lg text-left transition-all border overflow-hidden ${
+          indented ? "ml-4 w-[calc(100%-1rem)]" : ""
+        } ${
+          isSelected(build)
+            ? "bg-primary/10 border-primary/50"
+            : "bg-surface border-transparent hover:border-border hover:bg-surface-hover"
+        }`}
+      >
+        <div className="flex">
+          {/* Status bar */}
+          <div className={`w-1 shrink-0 ${statusBarColor(build.status_text)}`} />
+          <div className="flex-1 p-3 min-w-0">
+            {/* Row 1: status + workflow + date */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                {getStatusIcon(build.status_text)}
+                <span className="text-sm font-medium text-text-primary truncate">
+                  {build.workflow || "Unknown Workflow"}
+                </span>
+              </div>
+              <span className="text-xs text-text-muted shrink-0">
+                {build.triggered_at
+                  ? format(new Date(build.triggered_at), "MMM d, h:mma")
+                  : ""}
+              </span>
+            </div>
+
+            {/* Row 2: commit message */}
+            {build.commit_message && (
+              <p className="mt-1.5 text-xs text-text-secondary truncate">
+                {build.commit_message}
+              </p>
+            )}
+
+            {/* Row 3: metadata chips */}
+            <div className="mt-2 flex items-center gap-3 flex-wrap">
+              {!indented && renderBranchTag(build.branch, build.pull_request_target_branch)}
+              {build.pull_request_id && (
+                <span className="text-xs text-text-muted">#{build.pull_request_id}</span>
+              )}
+              {hash && (
+                <div className="flex items-center gap-1">
+                  <GitCommitHorizontal size={12} className="text-text-muted" />
+                  <span className="text-xs font-mono text-text-muted">{hash}</span>
+                </div>
+              )}
+              {duration && (
+                <div className="flex items-center gap-1">
+                  <Clock size={12} className="text-text-muted" />
+                  <span className="text-xs text-text-muted">{duration}</span>
+                </div>
+              )}
+              {build.triggered_by && (
+                <div className="flex items-center gap-1">
+                  <User size={12} className="text-text-muted" />
+                  <span className="text-xs text-text-muted">{build.triggered_by}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Watch button for standalone builds */}
+            {!indented && build.branch && !watchedSet.has(build.branch) && (
+              <div className="mt-2">
+                {renderWatchButton(build.branch)}
+              </div>
+            )}
+          </div>
         </div>
-      )}
-    </button>
-  );
+      </button>
+    );
+  };
 
   const renderPipelineGroup = (group: BuildGroup & { type: "pipeline" }) => {
     const expanded = expandedPipelines.has(group.buildNumber);
     const first = group.builds[0];
     const status = computePipelineStatus(group.builds);
     const hasSelectedChild = group.builds.some(isSelected);
+    const duration = getDuration(first);
+    const hash = shortHash(first.commit_hash);
 
     return (
       <div key={`pipeline-${group.buildNumber}`}>
-        <button
-          onClick={() => togglePipeline(group.buildNumber)}
-          className={`w-full p-3 rounded-lg text-left transition-all border ${
+        <div
+          onContextMenu={(e) => handleContextMenu(e, getBitriseUrl(first))}
+          className={`rounded-lg border overflow-hidden transition-all ${
             hasSelectedChild && !expanded
               ? "bg-primary/10 border-primary/50"
               : "bg-surface border-transparent hover:border-border hover:bg-surface-hover"
           }`}
         >
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex items-center gap-2">
-              {expanded
-                ? <ChevronDown size={16} className="text-text-muted" />
-                : <ChevronRight size={16} className="text-text-muted" />}
-              {getStatusIcon(status)}
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-text-primary">
-                  #{group.buildNumber}
-                </span>
-                <span className="text-xs text-text-muted">
-                  {first.branch || "unknown branch"}
-                </span>
+          <button
+            onClick={() => togglePipeline(group.buildNumber)}
+            className="w-full text-left"
+          >
+            <div className="flex">
+              {/* Status bar */}
+              <div className={`w-1 shrink-0 ${statusBarColor(status)}`} />
+              <div className="flex-1 p-3 min-w-0">
+                {/* Row 1: expand + status + build number + workflow count + date */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {expanded
+                      ? <ChevronDown size={16} className="text-text-muted shrink-0" />
+                      : <ChevronRight size={16} className="text-text-muted shrink-0" />}
+                    {getStatusIcon(status)}
+                    <span className="text-sm font-semibold text-text-primary">
+                      #{group.buildNumber}
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-surface-hover text-text-secondary">
+                      <Layers size={11} />
+                      {group.builds.length}
+                    </span>
+                  </div>
+                  <span className="text-xs text-text-muted shrink-0">
+                    {first.triggered_at
+                      ? format(new Date(first.triggered_at), "MMM d, h:mma")
+                      : ""}
+                  </span>
+                </div>
+
+                {/* Row 2: commit message */}
+                {first.commit_message && (
+                  <p className="mt-1.5 text-xs text-text-secondary truncate ml-8">
+                    {first.commit_message}
+                  </p>
+                )}
+
+                {/* Row 3: metadata */}
+                <div className="mt-2 ml-8 flex items-center gap-3 flex-wrap">
+                  {renderBranchTag(first.branch, first.pull_request_target_branch)}
+                  {first.pull_request_id && (
+                    <span className="text-xs text-text-muted">#{first.pull_request_id}</span>
+                  )}
+                  {hash && (
+                    <div className="flex items-center gap-1">
+                      <GitCommitHorizontal size={12} className="text-text-muted" />
+                      <span className="text-xs font-mono text-text-muted">{hash}</span>
+                    </div>
+                  )}
+                  {duration && (
+                    <div className="flex items-center gap-1">
+                      <Clock size={12} className="text-text-muted" />
+                      <span className="text-xs text-text-muted">{duration}</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-surface-hover text-text-secondary">
-                <Layers size={12} />
-                {group.builds.length} workflows
-              </span>
-              <span className="text-xs text-text-muted">
-                {first.triggered_at
-                  ? format(new Date(first.triggered_at), "MMM d, HH:mm")
-                  : ""}
-              </span>
+          </button>
+
+          {/* Watch button — outside the toggle button so it doesn't collapse/expand */}
+          {first.branch && !watchedSet.has(first.branch) && (
+            <div className="pl-12 pb-2">
+              {renderWatchButton(first.branch)}
             </div>
-          </div>
-
-          {first.commit_message && (
-            <p className="mt-2 text-xs text-text-secondary truncate ml-6">
-              {first.commit_message}
-            </p>
           )}
-        </button>
+        </div>
 
+        {/* Expanded child workflows */}
         {expanded && (
           <div className="space-y-1 mt-1">
             {group.builds.map((build) => renderBuildButton(build, true))}
@@ -216,16 +430,53 @@ export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh }: B
           </div>
         ) : (
           <div className="p-2">
-            <div className="space-y-1">
-              {groups.map((group) =>
+            <div className="space-y-1.5">
+              {filteredGroups.map((group) =>
                 group.type === "single"
                   ? renderBuildButton(group.build, false)
                   : renderPipelineGroup(group)
               )}
             </div>
+            {hasMore && (
+              <div className="py-3 flex justify-center">
+                <button
+                  onClick={onLoadMore}
+                  disabled={loadingMore}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {loadingMore ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    "Load More"
+                  )}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
+
+      {/* Context menu */}
+      {contextMenu && (
+        <div
+          className="fixed z-50 bg-surface border border-border rounded-lg shadow-xl py-1 min-w-[180px]"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          <button
+            onClick={() => {
+              open(contextMenu.url);
+              closeContextMenu();
+            }}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-text-primary hover:bg-surface-hover transition-colors"
+          >
+            <ExternalLink size={14} />
+            Open in Bitrise
+          </button>
+        </div>
+      )}
     </div>
   );
 }

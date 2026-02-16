@@ -1,21 +1,28 @@
 import { useState, useEffect } from "react";
-import { api } from "./api";
+import { api, setCachedToken } from "./api";
 import { App as AppType, Build, Settings } from "./types";
 import { Sidebar } from "./components/Sidebar";
 import { BuildList } from "./components/BuildList";
 import { ArtifactPanel } from "./components/ArtifactPanel";
 import { SettingsModal } from "./components/SettingsModal";
+import { AddAppModal } from "./components/AddAppModal";
 import { DeviceBar } from "./components/DeviceBar";
 import { Loader2, Settings as SettingsIcon } from "lucide-react";
 
 function App() {
   const [settings, setSettings] = useState<Settings>({ api_token: "" });
-  const [apps, setApps] = useState<AppType[]>([]);
+  const [watchlistApps, setWatchlistApps] = useState<AppType[]>([]);
+  const [watchlistBranches, setWatchlistBranches] = useState<Record<string, string[]>>({});
   const [selectedApp, setSelectedApp] = useState<AppType | null>(null);
+  const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
   const [builds, setBuilds] = useState<Build[]>([]);
   const [selectedBuild, setSelectedBuild] = useState<Build | null>(null);
   const [loading, setLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showAddApp, setShowAddApp] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<"all" | "success" | "failed">("all");
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -26,8 +33,22 @@ function App() {
     try {
       const saved = await api.loadSettings();
       setSettings(saved);
+
+      const apps = saved.watchlist_apps || [];
+      const branches = saved.watchlist_branches || {};
+      setWatchlistApps(apps);
+      setWatchlistBranches(branches);
+
       if (saved.api_token) {
-        await fetchApps(saved.api_token, saved.selected_app_slug);
+        setCachedToken(saved.api_token);
+
+        if (saved.selected_app_slug) {
+          const app = apps.find((a) => a.slug === saved.selected_app_slug);
+          if (app) {
+            setSelectedApp(app);
+            await fetchBuilds(app.slug);
+          }
+        }
       } else {
         setShowSettings(true);
       }
@@ -37,33 +58,14 @@ function App() {
     }
   };
 
-  const fetchApps = async (token: string, selectedSlug?: string) => {
+  const fetchBuilds = async (appSlug: string, branch?: string) => {
     setLoading(true);
     setError(null);
+    setNextCursor(undefined);
     try {
-      const appList = await api.getApps(token);
-      setApps(appList);
-      
-      if (selectedSlug) {
-        const app = appList.find(a => a.slug === selectedSlug);
-        if (app) {
-          setSelectedApp(app);
-          await fetchBuilds(app.slug);
-        }
-      }
-    } catch (err) {
-      setError("Failed to fetch apps. Check your API token.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchBuilds = async (appSlug: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const buildList = await api.getBuilds(appSlug);
-      setBuilds(buildList);
+      const result = await api.getBuilds(appSlug, branch);
+      setBuilds(result.builds);
+      setNextCursor(result.next);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       setError(errorMessage || "Failed to fetch builds");
@@ -73,24 +75,129 @@ function App() {
     }
   };
 
-  const handleAppSelect = (app: AppType) => {
-    setSelectedApp(app);
-    setSelectedBuild(null);
-    fetchBuilds(app.slug);
-    
-    const newSettings = { ...settings, selected_app_slug: app.slug };
+  const loadMoreBuilds = async () => {
+    if (!selectedApp || !nextCursor) return;
+    setLoadingMore(true);
+    try {
+      const result = await api.getBuilds(selectedApp.slug, selectedBranch || undefined, nextCursor);
+      setBuilds((prev) => [...prev, ...result.builds]);
+      setNextCursor(result.next);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(errorMessage || "Failed to load more builds");
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  const persistSettings = (updates: Partial<Settings>) => {
+    const newSettings = { ...settings, ...updates };
     setSettings(newSettings);
     api.saveSettings(newSettings);
   };
 
+  const handleAppSelect = (app: AppType) => {
+    setSelectedApp(app);
+    setSelectedBuild(null);
+    setSelectedBranch(null);
+    fetchBuilds(app.slug);
+    persistSettings({ selected_app_slug: app.slug });
+  };
+
+  const handleAddToWatchlist = (app: AppType) => {
+    const updated = [...watchlistApps, app];
+    setWatchlistApps(updated);
+    persistSettings({ watchlist_apps: updated });
+  };
+
+  const handleRemoveFromWatchlist = (appSlug: string) => {
+    const updated = watchlistApps.filter((a) => a.slug !== appSlug);
+    setWatchlistApps(updated);
+
+    // Clear selection if we removed the active app
+    if (selectedApp?.slug === appSlug) {
+      setSelectedApp(null);
+      setSelectedBuild(null);
+      setSelectedBranch(null);
+      setBuilds([]);
+    }
+
+    // Clean up branches for removed app
+    const newBranches = { ...watchlistBranches };
+    delete newBranches[appSlug];
+    setWatchlistBranches(newBranches);
+
+    persistSettings({
+      watchlist_apps: updated,
+      watchlist_branches: newBranches,
+      selected_app_slug: selectedApp?.slug === appSlug ? undefined : settings.selected_app_slug,
+    });
+  };
+
+  const handleAddBranch = (branch: string) => {
+    if (!selectedApp) return;
+    const appBranches = watchlistBranches[selectedApp.slug] || [];
+    if (appBranches.includes(branch)) return;
+
+    const newBranches = {
+      ...watchlistBranches,
+      [selectedApp.slug]: [...appBranches, branch],
+    };
+    setWatchlistBranches(newBranches);
+    persistSettings({ watchlist_branches: newBranches });
+  };
+
+  const handleRemoveBranch = (branch: string) => {
+    if (!selectedApp) return;
+    const appBranches = watchlistBranches[selectedApp.slug] || [];
+    const newBranches = {
+      ...watchlistBranches,
+      [selectedApp.slug]: appBranches.filter((b) => b !== branch),
+    };
+    setWatchlistBranches(newBranches);
+
+    // Clear branch filter if we removed the active branch
+    if (selectedBranch === branch) {
+      setSelectedBranch(null);
+      fetchBuilds(selectedApp.slug);
+    }
+
+    persistSettings({ watchlist_branches: newBranches });
+  };
+
+  const handleSelectBranch = (branch: string) => {
+    if (!selectedApp) return;
+    setSelectedBranch(branch);
+    setSelectedBuild(null);
+    fetchBuilds(selectedApp.slug, branch);
+  };
+
+  const handleClearBranchFilter = () => {
+    if (!selectedApp) return;
+    setSelectedBranch(null);
+    setSelectedBuild(null);
+    fetchBuilds(selectedApp.slug);
+  };
+
   const handleSaveSettings = async (newSettings: Settings) => {
-    setSettings(newSettings);
-    await api.saveSettings(newSettings);
+    // Merge watchlist data so SettingsModal doesn't overwrite them
+    const merged: Settings = {
+      ...newSettings,
+      watchlist_apps: watchlistApps,
+      watchlist_branches: watchlistBranches,
+    };
+    setSettings(merged);
+    await api.saveSettings(merged);
     setShowSettings(false);
-    if (newSettings.api_token) {
-      await fetchApps(newSettings.api_token);
+
+    if (merged.api_token) {
+      setCachedToken(merged.api_token);
     }
   };
+
+  const currentBranches = selectedApp
+    ? watchlistBranches[selectedApp.slug] || []
+    : [];
 
   return (
     <div className="h-screen flex flex-col bg-background">
@@ -118,9 +225,18 @@ function App() {
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
         <Sidebar
-          apps={apps}
+          apps={watchlistApps}
           selectedApp={selectedApp}
           onSelectApp={handleAppSelect}
+          onRemoveApp={handleRemoveFromWatchlist}
+          onAddApp={() => setShowAddApp(true)}
+          branches={currentBranches}
+          selectedBranch={selectedBranch}
+          onSelectBranch={handleSelectBranch}
+          onRemoveBranch={handleRemoveBranch}
+          onClearBranchFilter={handleClearBranchFilter}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
         />
 
         <main className="flex-1 flex min-w-0">
@@ -135,7 +251,7 @@ function App() {
                 <div className="flex gap-4 justify-center mt-4">
                   {selectedApp && (
                     <button
-                      onClick={() => fetchBuilds(selectedApp.slug)}
+                      onClick={() => fetchBuilds(selectedApp.slug, selectedBranch || undefined)}
                       className="text-primary hover:underline"
                     >
                       Retry
@@ -155,9 +271,19 @@ function App() {
               <div className="flex-1 min-w-0 border-r border-border">
                 <BuildList
                   builds={builds}
+                  appSlug={selectedApp?.slug}
                   selectedBuild={selectedBuild}
                   onSelectBuild={setSelectedBuild}
-                  onRefresh={() => selectedApp && fetchBuilds(selectedApp.slug)}
+                  onRefresh={() =>
+                    selectedApp &&
+                    fetchBuilds(selectedApp.slug, selectedBranch || undefined)
+                  }
+                  watchedBranches={currentBranches}
+                  onAddBranch={handleAddBranch}
+                  statusFilter={statusFilter}
+                  hasMore={!!nextCursor}
+                  loadingMore={loadingMore}
+                  onLoadMore={loadMoreBuilds}
                 />
               </div>
 
@@ -187,6 +313,17 @@ function App() {
               setShowSettings(false);
             }
           }}
+        />
+      )}
+
+      {/* Add App Modal */}
+      {showAddApp && settings.api_token && (
+        <AddAppModal
+          apiToken={settings.api_token}
+          watchlistApps={watchlistApps}
+          onAddApp={handleAddToWatchlist}
+          onRemoveApp={handleRemoveFromWatchlist}
+          onClose={() => setShowAddApp(false)}
         />
       )}
     </div>

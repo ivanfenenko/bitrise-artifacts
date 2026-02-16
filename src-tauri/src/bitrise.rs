@@ -29,9 +29,19 @@ pub struct Build {
     #[serde(default)]
     pub triggered_at: Option<String>,
     #[serde(default)]
+    pub finished_at: Option<String>,
+    #[serde(default)]
     pub triggered_by: Option<String>,
     #[serde(default)]
     pub commit_message: Option<String>,
+    #[serde(default)]
+    pub commit_hash: Option<String>,
+    #[serde(default)]
+    pub pull_request_id: Option<i64>,
+    #[serde(default)]
+    pub pull_request_target_branch: Option<String>,
+    #[serde(default)]
+    pub pipeline_id: Option<String>,
     #[serde(default, alias = "triggered_workflow")]
     pub workflow: Option<String>,
 }

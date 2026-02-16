@@ -15,6 +15,10 @@ pub struct AppState {
 pub struct Settings {
     pub api_token: String,
     pub selected_app_slug: Option<String>,
+    #[serde(default)]
+    pub watchlist_apps: Vec<bitrise::App>,
+    #[serde(default)]
+    pub watchlist_branches: std::collections::HashMap<String, Vec<String>>,
 }
 
 #[tauri::command]

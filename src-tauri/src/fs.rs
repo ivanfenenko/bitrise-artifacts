@@ -28,6 +28,8 @@ pub async fn load_settings() -> anyhow::Result<Settings> {
         return Ok(Settings {
             api_token: String::new(),
             selected_app_slug: None,
+            watchlist_apps: Vec::new(),
+            watchlist_branches: std::collections::HashMap::new(),
         });
     }
     

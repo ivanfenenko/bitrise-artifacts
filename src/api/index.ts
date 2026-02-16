@@ -5,6 +5,10 @@ import { BitriseClient } from "./bitrise";
 // Cache the API token for BitriseClient reuse
 let cachedToken: string | null = null;
 
+export function setCachedToken(token: string) {
+  cachedToken = token;
+}
+
 // Helper to log API calls (used for Rust commands only)
 async function invokeWithLogging<T>(
   command: string,
@@ -42,18 +46,13 @@ export const api = {
     }
   },
 
-  async getBuilds(appSlug: string): Promise<Build[]> {
-    console.log("[API] getBuilds called for app:", appSlug);
+  async getBuilds(appSlug: string, branch?: string, next?: string): Promise<{ builds: Build[]; next?: string }> {
+    console.log("[API] getBuilds called for app:", appSlug, branch ? `branch: ${branch}` : "", next ? `next: ${next}` : "");
     if (!cachedToken) {
       throw new Error("No API token available. Please set token first via getApps()");
     }
     const client = new BitriseClient(cachedToken);
-    const builds = await client.getBuilds(appSlug);
-    console.log("Builds received in frontend:", builds);
-    if (builds && builds.length > 0) {
-      console.log("First build workflow:", builds[0].workflow);
-    }
-    return builds;
+    return client.getBuilds(appSlug, branch, next);
   },
 
   async getArtifacts(appSlug: string, buildSlug: string): Promise<Artifact[]> {

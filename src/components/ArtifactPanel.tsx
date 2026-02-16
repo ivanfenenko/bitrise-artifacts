@@ -2,14 +2,15 @@ import { useState, useEffect } from "react";
 import { Build, Artifact, Device } from "../types";
 import { api } from "../api";
 import { format } from "date-fns";
-import { 
-  FileArchive, 
-  Download, 
-  Smartphone, 
+import {
+  FileArchive,
+  Download,
+  Smartphone,
   ExternalLink,
   Loader2,
   Package,
-  X
+  X,
+  File,
 } from "lucide-react";
 
 interface ArtifactPanelProps {
@@ -60,7 +61,7 @@ export function ArtifactPanel({ build, appSlug }: ArtifactPanelProps) {
     setLoading(true);
     try {
       const artifactList = await api.getArtifacts(appSlug, build.slug);
-      setArtifacts(artifactList.filter(a => a.title?.endsWith('.apk')));
+      setArtifacts(artifactList);
     } catch (err) {
       console.error("Failed to fetch artifacts", err);
     } finally {
@@ -69,28 +70,30 @@ export function ArtifactPanel({ build, appSlug }: ArtifactPanelProps) {
   };
 
   const formatFilename = (branch?: string, originalFilename?: string): string => {
-    if (!originalFilename) return "artifact.apk";
-    
-    // Remove .apk extension from original filename
-    const baseName = originalFilename.replace(/\.apk$/i, '');
-    
+    if (!originalFilename) return "artifact";
+
+    // Split into base name and extension
+    const dotIdx = originalFilename.lastIndexOf('.');
+    const baseName = dotIdx > 0 ? originalFilename.substring(0, dotIdx) : originalFilename;
+    const ext = dotIdx > 0 ? originalFilename.substring(dotIdx) : "";
+
     if (!branch) return originalFilename;
-    
+
     // Extract ticket number from branch (e.g., AND-240 from feature/AND-240_description)
     const ticketMatch = branch.match(/([A-Z]+-\d+)/);
     const ticketNumber = ticketMatch ? ticketMatch[1] : null;
-    
+
     // If develop or master, append date
     if (branch === "develop" || branch === "master" || branch.endsWith("/develop") || branch.endsWith("/master")) {
       const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-      return `${baseName}-${today}.apk`;
+      return `${baseName}-${today}${ext}`;
     }
-    
+
     // If we found a ticket number, append it
     if (ticketNumber) {
-      return `${baseName}-${ticketNumber}.apk`;
+      return `${baseName}-${ticketNumber}${ext}`;
     }
-    
+
     // Otherwise just use the original filename
     return originalFilename;
   };
@@ -271,89 +274,104 @@ export function ArtifactPanel({ build, appSlug }: ArtifactPanelProps) {
         ) : artifacts.length === 0 ? (
           <div className="text-center py-8 text-text-muted">
             <FileArchive size={32} className="mx-auto mb-2 opacity-50" />
-            <p className="text-sm">No APK artifacts found</p>
+            <p className="text-sm">No artifacts found</p>
           </div>
         ) : (
           <div className="space-y-3">
-            {artifacts.map((artifact, index) => (
-              <div
-                key={artifact.slug || index}
-                className="bg-background border border-border rounded-lg p-4 hover:border-primary/50 transition-colors"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                      <Smartphone size={20} className="text-primary" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-medium text-text-primary truncate">
-                        {artifact.title || "Unknown Artifact"}
-                      </p>
-                      <p className="text-xs text-text-muted">
-                        {artifact.file_size !== undefined ? formatFileSize(artifact.file_size) : "Unknown size"}
-                      </p>
+            {artifacts.map((artifact, index) => {
+              const isApk = artifact.title?.toLowerCase().endsWith(".apk");
+              const isCached = artifact.slug ? !!downloadedArtifacts[artifact.slug] : false;
+
+              return (
+                <div
+                  key={artifact.slug || index}
+                  className="bg-background border border-border rounded-lg p-4 hover:border-primary/50 transition-colors"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                        isApk ? "bg-primary/10" : "bg-surface-hover"
+                      }`}>
+                        {isApk ? (
+                          <Smartphone size={20} className="text-primary" />
+                        ) : (
+                          <File size={20} className="text-text-secondary" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium text-text-primary truncate">
+                          {artifact.title || "Unknown Artifact"}
+                        </p>
+                        <p className="text-xs text-text-muted">
+                          {artifact.file_size !== undefined ? formatFileSize(artifact.file_size) : "Unknown size"}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="mt-4 flex gap-2">
-                  {!artifact.slug || !downloadedArtifacts[artifact.slug] ? (
-                    <button
-                      onClick={() => handleDownload(artifact)}
-                      disabled={!artifact.slug || !artifact.title || downloadingSlug === artifact.slug}
-                      className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-primary hover:bg-primary-hover text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
-                    >
-                      {downloadingSlug === artifact.slug ? (
-                        <Loader2 size={16} className="animate-spin" />
-                      ) : (
-                        <Download size={16} />
-                      )}
-                      Download
-                    </button>
-                  ) : (
-                    <div className="flex-1 flex rounded-lg overflow-hidden border border-border">
+                  <div className="mt-4 flex gap-2">
+                    {!isCached ? (
                       <button
-                        onClick={() => handleSaveToDownloads(artifact)}
-                        disabled={savingSlug === artifact.slug}
-                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-surface hover:bg-surface-hover text-text-primary text-sm font-medium transition-colors disabled:opacity-50"
+                        onClick={() => handleDownload(artifact)}
+                        disabled={!artifact.slug || !artifact.title || downloadingSlug === artifact.slug}
+                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-primary hover:bg-primary-hover text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
                       >
-                        {savingSlug === artifact.slug ? (
+                        {downloadingSlug === artifact.slug ? (
                           <Loader2 size={16} className="animate-spin" />
                         ) : (
                           <Download size={16} />
                         )}
-                        Save to Downloads
+                        Download
                       </button>
-                      <div className="w-px bg-border" />
-                      <button
-                        onClick={() => handleInstall(artifact)}
-                        disabled={installingSlug === artifact.slug || deviceLoading}
-                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-primary hover:bg-primary-hover text-white text-sm font-medium transition-colors disabled:opacity-50"
-                      >
-                        {installingSlug === artifact.slug ? (
-                          <Loader2 size={16} className="animate-spin" />
-                        ) : (
-                          <Smartphone size={16} />
+                    ) : (
+                      <div className="flex-1 flex rounded-lg overflow-hidden border border-border">
+                        <button
+                          onClick={() => handleSaveToDownloads(artifact)}
+                          disabled={savingSlug === artifact.slug}
+                          className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-surface hover:bg-surface-hover text-text-primary text-sm font-medium transition-colors disabled:opacity-50"
+                        >
+                          {savingSlug === artifact.slug ? (
+                            <Loader2 size={16} className="animate-spin" />
+                          ) : (
+                            <Download size={16} />
+                          )}
+                          Save to Downloads
+                        </button>
+                        {isApk && (
+                          <>
+                            <div className="w-px bg-border" />
+                            <button
+                              onClick={() => handleInstall(artifact)}
+                              disabled={installingSlug === artifact.slug || deviceLoading}
+                              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-primary hover:bg-primary-hover text-white text-sm font-medium transition-colors disabled:opacity-50"
+                            >
+                              {installingSlug === artifact.slug ? (
+                                <Loader2 size={16} className="animate-spin" />
+                              ) : (
+                                <Smartphone size={16} />
+                              )}
+                              Install
+                            </button>
+                          </>
                         )}
-                        Install
-                      </button>
-                    </div>
-                  )}
-                  
-                  {artifact.is_public_page_enabled && artifact.public_install_page_url && (
-                    <a
-                      href={artifact.public_install_page_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-center px-3 py-2 border border-border hover:border-primary/50 rounded-lg transition-colors"
-                      title="Open install page"
-                    >
-                      <ExternalLink size={16} className="text-text-secondary" />
-                    </a>
-                  )}
+                      </div>
+                    )}
+
+                    {artifact.is_public_page_enabled && artifact.public_install_page_url && (
+                      <a
+                        href={artifact.public_install_page_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center px-3 py-2 border border-border hover:border-primary/50 rounded-lg transition-colors"
+                        title="Open install page"
+                      >
+                        <ExternalLink size={16} className="text-text-secondary" />
+                      </a>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

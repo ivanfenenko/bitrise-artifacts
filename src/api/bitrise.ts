@@ -47,8 +47,14 @@ export class BitriseClient {
     }
   }
 
-  async getBuilds(appSlug: string): Promise<Build[]> {
-    const url = `${BITRISE_API_BASE}/apps/${appSlug}/builds?limit=50`;
+  async getBuilds(appSlug: string, branch?: string, next?: string): Promise<{ builds: Build[]; next?: string }> {
+    let url = `${BITRISE_API_BASE}/apps/${appSlug}/builds?limit=50`;
+    if (branch) {
+      url += `&branch=${encodeURIComponent(branch)}`;
+    }
+    if (next) {
+      url += `&next=${encodeURIComponent(next)}`;
+    }
     console.log('[BitriseClient] Fetching builds from:', url);
 
     const response = await tauriFetch(url, {
@@ -64,7 +70,7 @@ export class BitriseClient {
       throw new Error(`API error ${response.status}: ${body}`);
     }
 
-    const data = await response.json() as { data: any[] };
+    const data = await response.json() as { data: any[]; paging?: { next?: string } };
     console.log('[BitriseClient] Successfully parsed', data.data.length, 'builds');
 
     // Map triggered_workflow to workflow (Bitrise API returns triggered_workflow)
@@ -73,13 +79,7 @@ export class BitriseClient {
       workflow: build.workflow || build.triggered_workflow,
     }));
 
-    // Debug: log first build to see structure
-    if (builds.length > 0) {
-      console.log('[BitriseClient] First build workflow:', builds[0].workflow);
-      console.log('[BitriseClient] First build raw data:', data.data[0]);
-    }
-
-    return builds;
+    return { builds, next: data.paging?.next };
   }
 
   async getArtifacts(appSlug: string, buildSlug: string): Promise<Artifact[]> {
