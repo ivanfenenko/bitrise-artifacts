@@ -55,7 +55,7 @@ pub struct Artifact {
     #[serde(default)]
     pub artifact_type: Option<String>,
     #[serde(default)]
-    pub file_size: Option<i64>,
+    pub file_size_bytes: Option<i64>,
     #[serde(default)]
     pub is_public_page_enabled: Option<bool>,
     #[serde(default)]

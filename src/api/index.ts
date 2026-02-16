@@ -104,6 +104,10 @@ export const api = {
     });
   },
 
+  async openPath(path: string): Promise<void> {
+    return invokeWithLogging("open_path", { path });
+  },
+
   async saveSettings(settings: Settings): Promise<void> {
     return invokeWithLogging("save_settings", { settings });
   },

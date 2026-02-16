@@ -28,14 +28,19 @@ function App() {
   // Resizable panels
   const [sidebarWidth, setSidebarWidth] = useState(256);
   const [artifactWidth, setArtifactWidth] = useState(450);
+  const hasLoadedWidths = useRef(false);
   const dragging = useRef<"sidebar" | "artifact" | null>(null);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (dragging.current === "sidebar") {
-      setSidebarWidth(Math.max(180, Math.min(400, e.clientX)));
+      const nextWidth = Math.max(180, Math.min(400, e.clientX));
+      setSidebarWidth(nextWidth);
+      persistSettings({ sidebar_width: nextWidth });
     } else if (dragging.current === "artifact") {
       const fromRight = window.innerWidth - e.clientX;
-      setArtifactWidth(Math.max(280, Math.min(700, fromRight)));
+      const nextWidth = Math.max(280, Math.min(700, fromRight));
+      setArtifactWidth(nextWidth);
+      persistSettings({ artifact_width: nextWidth });
     }
   }, []);
 
@@ -68,6 +73,16 @@ function App() {
     try {
       const saved = await api.loadSettings();
       setSettings(saved);
+
+      if (!hasLoadedWidths.current) {
+        if (typeof saved.sidebar_width === "number") {
+          setSidebarWidth(saved.sidebar_width);
+        }
+        if (typeof saved.artifact_width === "number") {
+          setArtifactWidth(saved.artifact_width);
+        }
+        hasLoadedWidths.current = true;
+      }
 
       const apps = saved.watchlist_apps || [];
       const branches = saved.watchlist_branches || {};
@@ -336,19 +351,22 @@ function App() {
                 />
               </div>
 
-              {/* Artifact resize handle */}
-              <div
-                onMouseDown={() => startDrag("artifact")}
-                className="w-1 hover:w-1 cursor-col-resize bg-transparent hover:bg-primary/30 transition-colors shrink-0"
-              />
-              <div className="shrink-0" style={{ width: artifactWidth }}>
-                {selectedBuild?.slug && (
-                  <ArtifactPanel
-                    build={selectedBuild}
-                    appSlug={selectedApp?.slug}
+              {selectedBuild?.slug && (
+                <>
+                  {/* Artifact resize handle */}
+                  <div
+                    onMouseDown={() => startDrag("artifact")}
+                    className="w-1 hover:w-1 cursor-col-resize bg-transparent hover:bg-primary/30 transition-colors shrink-0"
                   />
-                )}
-              </div>
+                  <div className="shrink-0" style={{ width: artifactWidth }}>
+                    <ArtifactPanel
+                      build={selectedBuild}
+                      appSlug={selectedApp?.slug}
+                      onClose={() => setSelectedBuild(null)}
+                    />
+                  </div>
+                </>
+              )}
             </>
           )}
         </main>

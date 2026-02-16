@@ -6,6 +6,7 @@ use tokio::sync::Mutex;
 use crate::bitrise::{self, BitriseClient};
 use crate::adb;
 use crate::fs;
+use std::process::Command;
 
 pub struct AppState {
     pub bitrise_client: Arc<Mutex<Option<BitriseClient>>>,
@@ -104,9 +105,9 @@ pub async fn save_to_downloads(
 ) -> Result<String, String> {
     let home = dirs::home_dir()
         .ok_or_else(|| "Could not get home directory".to_string())?;
-    let download_dir = home.join("Downloads");
+    let download_dir = home.join("Downloads").join("Bitrise");
     
-    // Ensure Downloads directory exists
+    // Ensure Downloads/Bitrise directory exists
     tokio::fs::create_dir_all(&download_dir)
         .await
         .map_err(|e| format!("Failed to create Downloads directory: {}", e))?;
@@ -135,6 +136,41 @@ pub async fn save_to_downloads(
         .map_err(|e| format!("Failed to copy file to Downloads: {}", e))?;
     
     Ok(dest_path_str)
+}
+
+#[tauri::command]
+pub async fn open_path(path: String) -> Result<(), String> {
+    if !std::path::Path::new(&path).exists() {
+        return Err("File not found".to_string());
+    }
+
+    #[cfg(target_os = "macos")]
+    let mut cmd = {
+        let mut command = Command::new("open");
+        command.arg(&path);
+        command
+    };
+
+    #[cfg(target_os = "windows")]
+    let mut cmd = {
+        let mut command = Command::new("cmd");
+        command.args(["/C", "start", "", &path]);
+        command
+    };
+
+    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+    let mut cmd = {
+        let mut command = Command::new("xdg-open");
+        command.arg(&path);
+        command
+    };
+
+    let status = cmd.status().map_err(|e| format!("Failed to open path: {}", e))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("Failed to open path (exit code: {:?})", status.code()))
+    }
 }
 
 #[tauri::command]

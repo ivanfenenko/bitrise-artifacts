@@ -1,6 +1,6 @@
 import { open } from "@tauri-apps/plugin-shell";
 import { Build } from "../types";
-import { format, formatDistanceStrict } from "date-fns";
+import { format, formatDistanceStrict, differenceInMinutes, differenceInHours } from "date-fns";
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import {
   RefreshCw, User, CircleCheck, CircleX, Loader2,
@@ -272,6 +272,20 @@ export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh, wat
     );
   };
 
+  const formatTriggeredAt = (value?: string) => {
+    if (!value) return "";
+    const date = new Date(value);
+    const minutes = differenceInMinutes(new Date(), date);
+    if (minutes < 60) {
+      return `${Math.max(1, minutes)}m ago`;
+    }
+    const hours = differenceInHours(new Date(), date);
+    if (hours < 24) {
+      return `${hours}h ago`;
+    }
+    return format(date, "MMM d, yyyy");
+  };
+
   const renderBuildButton = (build: Build, indented: boolean) => {
     const duration = getDuration(build);
     const hash = shortHash(build.commit_hash);
@@ -302,9 +316,7 @@ export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh, wat
                 </span>
               </div>
               <span className="text-xs text-text-muted shrink-0">
-                {build.triggered_at
-                  ? format(new Date(build.triggered_at), "MMM d, h:mma")
-                  : ""}
+                {formatTriggeredAt(build.triggered_at)}
               </span>
             </div>
 
@@ -395,9 +407,7 @@ export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh, wat
                     </span>
                   </div>
                   <span className="text-xs text-text-muted shrink-0">
-                    {first.triggered_at
-                      ? format(new Date(first.triggered_at), "MMM d, h:mma")
-                      : ""}
+                    {formatTriggeredAt(first.triggered_at)}
                   </span>
                 </div>
 

@@ -16,16 +16,17 @@ import {
 interface ArtifactPanelProps {
   build: Build | null;
   appSlug?: string;
+  onClose?: () => void;
 }
 
-export function ArtifactPanel({ build, appSlug }: ArtifactPanelProps) {
+export function ArtifactPanel({ build, appSlug, onClose }: ArtifactPanelProps) {
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [loading, setLoading] = useState(false);
   const [downloadingSlug, setDownloadingSlug] = useState<string | null>(null);
   const [savingSlug, setSavingSlug] = useState<string | null>(null);
   const [installingSlug, setInstallingSlug] = useState<string | null>(null);
   const [downloadedArtifacts, setDownloadedArtifacts] = useState<
-    Record<string, { path: string; fileName: string }>
+    Record<string, { path: string; fileName: string; downloadPath?: string }>
   >({});
   const [deviceOptions, setDeviceOptions] = useState<Device[]>([]);
   const [devicePicker, setDevicePicker] = useState<
@@ -42,7 +43,6 @@ export function ArtifactPanel({ build, appSlug }: ArtifactPanelProps) {
     } else {
       setArtifacts([]);
     }
-    setDownloadedArtifacts({});
     setDownloadingSlug(null);
     setSavingSlug(null);
     setInstallingSlug(null);
@@ -99,13 +99,13 @@ export function ArtifactPanel({ build, appSlug }: ArtifactPanelProps) {
   };
 
   const handleDownload = async (artifact: Artifact) => {
-    if (!appSlug || !build?.slug || !artifact.slug || !artifact.title) {
-      console.error("Missing required data for download", { appSlug, buildSlug: build?.slug, artifactSlug: artifact.slug, title: artifact.title });
+    if (!appSlug || !build?.slug || !artifact.slug) {
+      setSnackbar({ type: "error", message: "Missing data — cannot download this artifact." });
       return;
     }
-    
-    const filename = formatFilename(build.branch, artifact.title);
-    console.log("Starting download for:", filename);
+
+    const rawName = artifact.title || `artifact-${artifact.slug}`;
+    const filename = formatFilename(build.branch, rawName);
     setDownloadingSlug(artifact.slug);
     try {
       const savePath = await api.downloadArtifact(
@@ -114,15 +114,35 @@ export function ArtifactPanel({ build, appSlug }: ArtifactPanelProps) {
         artifact.slug,
         filename
       );
-      console.log("Download complete:", savePath);
       setDownloadedArtifacts(prev => ({
         ...prev,
         [artifact.slug as string]: { path: savePath, fileName: filename },
       }));
-      alert("Artifact downloaded to cache.");
+      try {
+        const downloadsPath = await api.saveToDownloads(savePath, filename);
+        setDownloadedArtifacts(prev => ({
+          ...prev,
+          [artifact.slug as string]: {
+            path: savePath,
+            fileName: filename,
+            downloadPath: downloadsPath,
+          },
+        }));
+        setSnackbar({ type: "success", message: `Saved to Downloads: ${downloadsPath}` });
+      } catch (saveErr) {
+        console.error("Save to Downloads failed:", saveErr);
+        setSnackbar({
+          type: "error",
+          message: "Downloaded to cache, but failed to save to Downloads: " +
+            (saveErr instanceof Error ? saveErr.message : String(saveErr)),
+        });
+      }
     } catch (err) {
       console.error("Download failed:", err);
-      alert("Failed to download artifact: " + (err instanceof Error ? err.message : String(err)));
+      setSnackbar({
+        type: "error",
+        message: "Download failed: " + (err instanceof Error ? err.message : String(err)),
+      });
     } finally {
       setDownloadingSlug(null);
     }
@@ -132,7 +152,7 @@ export function ArtifactPanel({ build, appSlug }: ArtifactPanelProps) {
     if (!artifact.slug) return;
     const cached = downloadedArtifacts[artifact.slug];
     if (!cached) {
-      alert("Download the artifact first.");
+      setSnackbar({ type: "error", message: "Download the artifact first." });
       return;
     }
 
@@ -151,6 +171,33 @@ export function ArtifactPanel({ build, appSlug }: ArtifactPanelProps) {
       });
     } finally {
       setSavingSlug(null);
+    }
+  };
+
+  const handleOpenDownloaded = async (artifact: Artifact) => {
+    const cached = artifact.slug ? downloadedArtifacts[artifact.slug] : undefined;
+    const targetPath = cached?.downloadPath || cached?.path;
+    if (!targetPath) {
+      setSnackbar({ type: "error", message: "No downloaded file found to open." });
+      return;
+    }
+
+    try {
+      await api.openPath(targetPath);
+    } catch (err) {
+      console.error("Open failed:", err);
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.toLowerCase().includes("not found") && artifact.slug) {
+        setDownloadedArtifacts(prev => {
+          const next = { ...prev };
+          delete next[artifact.slug as string];
+          return next;
+        });
+      }
+      setSnackbar({
+        type: "error",
+        message: "Failed to open file: " + message,
+      });
     }
   };
 
@@ -174,7 +221,7 @@ export function ArtifactPanel({ build, appSlug }: ArtifactPanelProps) {
     if (!artifact.slug) return;
     const cached = downloadedArtifacts[artifact.slug];
     if (!cached) {
-      alert("Download the artifact first.");
+      setSnackbar({ type: "error", message: "Download the artifact first." });
       return;
     }
 
@@ -183,7 +230,7 @@ export function ArtifactPanel({ build, appSlug }: ArtifactPanelProps) {
     try {
       const devices = await api.getConnectedDevices();
       if (devices.length === 0) {
-        alert("No connected devices found.");
+        setSnackbar({ type: "error", message: "No connected devices found." });
         return;
       }
       if (devices.length === 1) {
@@ -195,7 +242,10 @@ export function ArtifactPanel({ build, appSlug }: ArtifactPanelProps) {
       setDevicePicker({ artifactSlug: artifact.slug, apkPath: cached.path });
     } catch (err) {
       console.error("Failed to get devices:", err);
-      alert("Failed to get connected devices: " + (err instanceof Error ? err.message : String(err)));
+      setSnackbar({
+        type: "error",
+        message: "Failed to get connected devices: " + (err instanceof Error ? err.message : String(err)),
+      });
     } finally {
       setDeviceLoading(false);
       if (!devicePicker) {
@@ -236,8 +286,18 @@ export function ArtifactPanel({ build, appSlug }: ArtifactPanelProps) {
 
   return (
     <div className="h-full flex flex-col bg-surface">
-      <div className="h-14 border-b border-border px-4 flex items-center">
+      <div className="h-14 border-b border-border px-4 flex items-center justify-between">
         <h2 className="font-semibold text-text-primary">Artifacts</h2>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-surface-hover rounded-lg transition-colors"
+            aria-label="Close artifacts panel"
+            title="Close"
+          >
+            <X size={18} className="text-text-secondary" />
+          </button>
+        )}
       </div>
 
       <div className="p-4 border-b border-border bg-background/50">
@@ -287,25 +347,25 @@ export function ArtifactPanel({ build, appSlug }: ArtifactPanelProps) {
                   key={artifact.slug || index}
                   className="bg-background border border-border rounded-lg p-4 hover:border-primary/50 transition-colors"
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                        isApk ? "bg-primary/10" : "bg-surface-hover"
-                      }`}>
-                        {isApk ? (
-                          <Smartphone size={20} className="text-primary" />
-                        ) : (
-                          <File size={20} className="text-text-secondary" />
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-medium text-text-primary truncate">
-                          {artifact.title || "Unknown Artifact"}
-                        </p>
-                        <p className="text-xs text-text-muted">
-                          {artifact.file_size !== undefined ? formatFileSize(artifact.file_size) : "Unknown size"}
-                        </p>
-                      </div>
+                  <div className="flex items-start gap-3">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
+                      isApk ? "bg-primary/10" : "bg-surface-hover"
+                    }`}>
+                      {isApk ? (
+                        <Smartphone size={20} className="text-primary" />
+                      ) : (
+                        <File size={20} className="text-text-secondary" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-text-primary truncate" title={artifact.title || undefined}>
+                        {artifact.title || "Unknown Artifact"}
+                      </p>
+                      <p className="text-xs text-text-muted">
+                        {artifact.file_size_bytes != null
+                          ? formatFileSize(artifact.file_size_bytes)
+                          : artifact.artifact_type || "File"}
+                      </p>
                     </div>
                   </div>
 
@@ -324,37 +384,43 @@ export function ArtifactPanel({ build, appSlug }: ArtifactPanelProps) {
                         Download
                       </button>
                     ) : (
-                      <div className="flex-1 flex rounded-lg overflow-hidden border border-border">
+                      isApk ? (
+                        <div className="flex-1 flex rounded-lg overflow-hidden border border-border">
+                          <button
+                            onClick={() => handleSaveToDownloads(artifact)}
+                            disabled={savingSlug === artifact.slug}
+                            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-surface hover:bg-surface-hover text-text-primary text-sm font-medium transition-colors disabled:opacity-50"
+                          >
+                            {savingSlug === artifact.slug ? (
+                              <Loader2 size={16} className="animate-spin" />
+                            ) : (
+                              <Download size={16} />
+                            )}
+                            Save to Downloads
+                          </button>
+                          <div className="w-px bg-border" />
+                          <button
+                            onClick={() => handleInstall(artifact)}
+                            disabled={installingSlug === artifact.slug || deviceLoading}
+                            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-primary hover:bg-primary-hover text-white text-sm font-medium transition-colors disabled:opacity-50"
+                          >
+                            {installingSlug === artifact.slug ? (
+                              <Loader2 size={16} className="animate-spin" />
+                            ) : (
+                              <Smartphone size={16} />
+                            )}
+                            Install
+                          </button>
+                        </div>
+                      ) : (
                         <button
-                          onClick={() => handleSaveToDownloads(artifact)}
-                          disabled={savingSlug === artifact.slug}
-                          className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-surface hover:bg-surface-hover text-text-primary text-sm font-medium transition-colors disabled:opacity-50"
+                          onClick={() => handleOpenDownloaded(artifact)}
+                          className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-surface hover:bg-surface-hover text-text-primary text-sm font-medium rounded-lg transition-colors"
                         >
-                          {savingSlug === artifact.slug ? (
-                            <Loader2 size={16} className="animate-spin" />
-                          ) : (
-                            <Download size={16} />
-                          )}
-                          Save to Downloads
+                          <ExternalLink size={16} />
+                          Open
                         </button>
-                        {isApk && (
-                          <>
-                            <div className="w-px bg-border" />
-                            <button
-                              onClick={() => handleInstall(artifact)}
-                              disabled={installingSlug === artifact.slug || deviceLoading}
-                              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-primary hover:bg-primary-hover text-white text-sm font-medium transition-colors disabled:opacity-50"
-                            >
-                              {installingSlug === artifact.slug ? (
-                                <Loader2 size={16} className="animate-spin" />
-                              ) : (
-                                <Smartphone size={16} />
-                              )}
-                              Install
-                            </button>
-                          </>
-                        )}
-                      </div>
+                      )
                     )}
 
                     {artifact.is_public_page_enabled && artifact.public_install_page_url && (
@@ -419,7 +485,7 @@ export function ArtifactPanel({ build, appSlug }: ArtifactPanelProps) {
       {snackbar && (
         <div className="fixed bottom-6 right-6 z-50">
           <div
-            className={`px-4 py-3 rounded-lg shadow-lg border text-sm font-medium ${
+            className={`px-4 py-3 rounded-lg shadow-lg border text-sm font-medium max-w-[50vw] break-words ${
               snackbar.type === "success"
                 ? "bg-success/10 text-success border-success/30"
                 : "bg-error/10 text-error border-error/30"

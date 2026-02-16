@@ -8,9 +8,22 @@
     "shell:allow-open",
     "fs:default",
     "fs:allow-read",
-    "fs:allow-write",
-    "fs:allow-exists",
-    "fs:allow-mkdir",
+    {
+      "identifier": "fs:allow-write",
+      "allow": [{ "path": "$HOME/.bitrise-artifacts/**" }]
+    },
+    {
+      "identifier": "fs:allow-write-file",
+      "allow": [{ "path": "$HOME/.bitrise-artifacts/**" }]
+    },
+    {
+      "identifier": "fs:allow-exists",
+      "allow": [{ "path": "$HOME/.bitrise-artifacts/**" }]
+    },
+    {
+      "identifier": "fs:allow-mkdir",
+      "allow": [{ "path": "$HOME/.bitrise-artifacts/**" }]
+    },
     "http:default",
     {
       "identifier": "http:allow-fetch",

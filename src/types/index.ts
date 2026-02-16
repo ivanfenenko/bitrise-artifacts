@@ -24,7 +24,7 @@ export interface Artifact {
   slug?: string;
   title?: string;
   artifact_type?: string;
-  file_size?: number;
+  file_size_bytes?: number;
   is_public_page_enabled?: boolean;
   public_install_page_url?: string;
 }
@@ -40,6 +40,8 @@ export interface Settings {
   selected_app_slug?: string;
   watchlist_apps?: App[];
   watchlist_branches?: Record<string, string[]>;
+  sidebar_width?: number;
+  artifact_width?: number;
 }
 
 export interface GroupedBuilds {
