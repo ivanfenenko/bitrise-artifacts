@@ -55,6 +55,14 @@ export const api = {
     return client.getBuilds(appSlug, branch, next);
   },
 
+  async getBranches(appSlug: string): Promise<string[]> {
+    if (!cachedToken) {
+      throw new Error("No API token available. Please set token first via getApps()");
+    }
+    const client = new BitriseClient(cachedToken);
+    return client.getBranches(appSlug);
+  },
+
   async getArtifacts(appSlug: string, buildSlug: string): Promise<Artifact[]> {
     console.log("[API] getArtifacts called for build:", buildSlug);
     if (!cachedToken) {

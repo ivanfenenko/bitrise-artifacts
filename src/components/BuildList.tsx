@@ -1,13 +1,15 @@
 import { open } from "@tauri-apps/plugin-shell";
 import { Build } from "../types";
 import { format, formatDistanceStrict } from "date-fns";
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import {
   RefreshCw, User, CircleCheck, CircleX, Loader2,
   ChevronRight, ChevronDown, Layers, Bookmark,
   CircleSlash, CircleDashed, CirclePause,
   GitBranch, GitCommitHorizontal, Clock, ArrowRight, ExternalLink,
+  Filter, Search, X,
 } from "lucide-react";
+import { api } from "../api";
 
 type StatusFilter = "all" | "success" | "failed";
 
@@ -29,6 +31,8 @@ interface BuildListProps {
   loadingMore: boolean;
   onLoadMore: () => void;
   appSlug?: string;
+  activeBranchFilter: string | null;
+  onBranchFilter: (branch: string | null) => void;
 }
 
 type BuildGroup = { type: "single"; build: Build } | { type: "pipeline"; buildNumber: number; builds: Build[] };
@@ -117,10 +121,15 @@ function statusBarColor(status?: string): string {
   }
 }
 
-export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh, watchedBranches, onAddBranch, statusFilter, hasMore, loadingMore, onLoadMore, appSlug }: BuildListProps) {
+export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh, watchedBranches, onAddBranch, statusFilter, hasMore, loadingMore, onLoadMore, appSlug, activeBranchFilter, onBranchFilter }: BuildListProps) {
   const watchedSet = useMemo(() => new Set(watchedBranches), [watchedBranches]);
   const [expandedPipelines, setExpandedPipelines] = useState<Set<number>>(new Set());
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
+  const [showBranchPicker, setShowBranchPicker] = useState(false);
+  const [allBranches, setAllBranches] = useState<string[]>([]);
+  const [branchSearch, setBranchSearch] = useState("");
+  const [branchesLoading, setBranchesLoading] = useState(false);
+  const branchPickerRef = useRef<HTMLDivElement>(null);
 
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
@@ -131,6 +140,36 @@ export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh, wat
       return () => document.removeEventListener("click", handler);
     }
   }, [contextMenu, closeContextMenu]);
+
+  // Fetch branches when picker opens
+  useEffect(() => {
+    if (showBranchPicker && appSlug) {
+      setBranchesLoading(true);
+      api.getBranches(appSlug)
+        .then(setAllBranches)
+        .catch(() => setAllBranches([]))
+        .finally(() => setBranchesLoading(false));
+    }
+  }, [showBranchPicker, appSlug]);
+
+  // Close branch picker on outside click
+  useEffect(() => {
+    if (!showBranchPicker) return;
+    const handler = (e: MouseEvent) => {
+      if (branchPickerRef.current && !branchPickerRef.current.contains(e.target as Node)) {
+        setShowBranchPicker(false);
+        setBranchSearch("");
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showBranchPicker]);
+
+  const filteredBranches = useMemo(() => {
+    if (!branchSearch.trim()) return allBranches;
+    const q = branchSearch.toLowerCase();
+    return allBranches.filter((b) => b.toLowerCase().includes(q));
+  }, [allBranches, branchSearch]);
 
   const groups = useMemo(() => groupBuilds(builds), [builds]);
   const filteredGroups = useMemo(
@@ -271,7 +310,7 @@ export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh, wat
 
             {/* Row 2: commit message */}
             {build.commit_message && (
-              <p className="mt-1.5 text-xs text-text-secondary truncate">
+              <p className="mt-1.5 text-xs text-text-secondary line-clamp-3">
                 {build.commit_message}
               </p>
             )}
@@ -364,7 +403,7 @@ export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh, wat
 
                 {/* Row 2: commit message */}
                 {first.commit_message && (
-                  <p className="mt-1.5 text-xs text-text-secondary truncate ml-8">
+                  <p className="mt-1.5 text-xs text-text-secondary line-clamp-3 ml-8">
                     {first.commit_message}
                   </p>
                 )}
@@ -413,14 +452,105 @@ export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh, wat
   return (
     <div className="h-full flex flex-col bg-background">
       <div className="h-14 border-b border-border px-4 flex items-center justify-between">
-        <h2 className="font-semibold text-text-primary">Builds</h2>
-        <button
-          onClick={onRefresh}
-          className="p-2 hover:bg-surface-hover rounded-lg transition-colors"
-          title="Refresh builds"
-        >
-          <RefreshCw size={18} className="text-text-secondary" />
-        </button>
+        <div className="flex items-center gap-2">
+          <h2 className="font-semibold text-text-primary">Builds</h2>
+          {activeBranchFilter && (
+            <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary text-xs font-medium">
+              <GitBranch size={12} />
+              <span className="max-w-[150px] truncate">{activeBranchFilter}</span>
+              <button
+                onClick={() => onBranchFilter(null)}
+                className="p-0.5 rounded hover:bg-primary/20 transition-colors"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          <div className="relative" ref={branchPickerRef}>
+            <button
+              onClick={() => setShowBranchPicker(!showBranchPicker)}
+              className={`p-2 rounded-lg transition-colors ${
+                showBranchPicker || activeBranchFilter
+                  ? "bg-primary/10 text-primary"
+                  : "hover:bg-surface-hover text-text-secondary"
+              }`}
+              title="Filter by branch"
+            >
+              <Filter size={18} />
+            </button>
+            {showBranchPicker && (
+              <div className="absolute right-0 top-full mt-1 w-72 bg-surface border border-border rounded-lg shadow-xl z-50 flex flex-col max-h-80">
+                <div className="p-2 border-b border-border">
+                  <div className="relative">
+                    <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
+                    <input
+                      type="text"
+                      value={branchSearch}
+                      onChange={(e) => setBranchSearch(e.target.value)}
+                      placeholder="Search branches..."
+                      className="w-full pl-8 pr-3 py-1.5 bg-background border border-border rounded-md text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-primary"
+                      autoFocus
+                    />
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                  {branchesLoading ? (
+                    <div className="flex items-center justify-center py-6">
+                      <Loader2 size={18} className="animate-spin text-primary" />
+                    </div>
+                  ) : filteredBranches.length === 0 ? (
+                    <div className="py-4 text-center text-xs text-text-muted">
+                      {branchSearch ? "No branches match" : "No branches found"}
+                    </div>
+                  ) : (
+                    <div className="py-1">
+                      {/* Show all option when a filter is active */}
+                      {activeBranchFilter && (
+                        <button
+                          onClick={() => {
+                            onBranchFilter(null);
+                            setShowBranchPicker(false);
+                            setBranchSearch("");
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-text-secondary hover:bg-surface-hover transition-colors"
+                        >
+                          <span className="font-medium">All branches</span>
+                        </button>
+                      )}
+                      {filteredBranches.map((branch) => (
+                        <button
+                          key={branch}
+                          onClick={() => {
+                            onBranchFilter(branch);
+                            setShowBranchPicker(false);
+                            setBranchSearch("");
+                          }}
+                          className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
+                            activeBranchFilter === branch
+                              ? "bg-primary/10 text-primary"
+                              : "text-text-secondary hover:bg-surface-hover"
+                          }`}
+                        >
+                          <GitBranch size={14} className="shrink-0" />
+                          <span className="truncate">{branch}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={onRefresh}
+            className="p-2 hover:bg-surface-hover rounded-lg transition-colors"
+            title="Refresh builds"
+          >
+            <RefreshCw size={18} className="text-text-secondary" />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">

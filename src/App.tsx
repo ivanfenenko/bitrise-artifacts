@@ -325,6 +325,14 @@ function App() {
                   hasMore={!!nextCursor}
                   loadingMore={loadingMore}
                   onLoadMore={loadMoreBuilds}
+                  activeBranchFilter={selectedBranch}
+                  onBranchFilter={(branch) => {
+                    if (branch) {
+                      handleSelectBranch(branch);
+                    } else {
+                      handleClearBranchFilter();
+                    }
+                  }}
                 />
               </div>
 

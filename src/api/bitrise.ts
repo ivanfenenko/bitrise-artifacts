@@ -82,6 +82,23 @@ export class BitriseClient {
     return { builds, next: data.paging?.next };
   }
 
+  async getBranches(appSlug: string): Promise<string[]> {
+    const url = `${BITRISE_API_BASE}/apps/${appSlug}/branches`;
+    const response = await tauriFetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `token ${this.token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch branches: ${response.status}`);
+    }
+
+    const data = await response.json() as { data: string[] };
+    return data.data;
+  }
+
   async getArtifacts(appSlug: string, buildSlug: string): Promise<Artifact[]> {
     const url = `${BITRISE_API_BASE}/apps/${appSlug}/builds/${buildSlug}/artifacts`;
     console.log('[BitriseClient] Fetching artifacts from:', url);

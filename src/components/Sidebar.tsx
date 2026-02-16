@@ -83,7 +83,7 @@ export function Sidebar({
                 >
                   <FolderGit2 size={18} className="shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{app.title}</p>
+                    <p className="text-sm font-medium truncate" title={app.title}>{app.title}</p>
                     {app.repo_slug && (
                       <p className="text-xs text-text-muted truncate">
                         {app.repo_slug}
@@ -143,7 +143,7 @@ export function Sidebar({
                     className="flex-1 flex items-center gap-3 px-3 py-2 min-w-0"
                   >
                     <GitBranch size={16} className="shrink-0" />
-                    <span className="text-sm font-medium truncate">
+                    <span className="text-sm font-medium truncate" title={branch}>
                       {branch}
                     </span>
                   </button>
