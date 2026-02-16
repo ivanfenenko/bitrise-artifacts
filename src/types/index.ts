@@ -6,6 +6,7 @@ export interface App {
 
 export interface Build {
   slug?: string;
+  build_number?: number;
   branch?: string;
   status_text?: string;
   triggered_at?: string;

@@ -1,83 +1,95 @@
-# Bitrise Artifacts - Project Documentation
+# AGENTS.md
 
 ## Project Overview
-Tauri desktop app for managing Bitrise Android build artifacts. Browse builds, download APKs, install to devices via ADB.
+
+Bitrise Artifacts Manager — a Tauri 2 desktop app for managing Bitrise Android build artifacts. Users browse apps and builds, download APKs, and install them to connected Android devices via ADB.
 
 ## Architecture
 
-### Frontend (React + TypeScript)
-- **src/App.tsx**: Main app component, manages global state
-- **src/components/**: UI components
-  - `Sidebar.tsx`: App selector sidebar
-  - `BuildList.tsx`: Builds grouped by branch
-  - `ArtifactPanel.tsx`: Artifact download/install panel
-  - `SettingsModal.tsx`: API token configuration
-  - `DeviceBar.tsx`: ADB device status bar
-- **src/api/index.ts**: Tauri command wrappers
-- **src/types/index.ts**: TypeScript type definitions
+```
+src/                          # Frontend (React 18 + TypeScript + Tailwind CSS)
+├── App.tsx                   # Root component, manages all top-level state
+├── api/
+│   ├── index.ts              # Tauri invoke() wrappers for IPC
+│   └── bitrise.ts            # BitriseClient using Tauri HTTP plugin
+├── components/
+│   ├── Sidebar.tsx           # App selector sidebar with icons
+│   ├── BuildList.tsx         # Builds grouped by branch, status indicators
+│   ├── ArtifactPanel.tsx     # Artifact download/install actions
+│   ├── DeviceBar.tsx         # Bottom bar showing connected ADB devices
+│   └── SettingsModal.tsx     # API token configuration dialog
+├── types/index.ts            # TypeScript interfaces (App, Build, Artifact, Device, Settings)
+├── main.tsx                  # React entry point
+└── styles.css                # Tailwind imports + custom scrollbar styles
 
-### Backend (Rust)
-- **src-tauri/src/main.rs**: Tauri app entry point
-- **src-tauri/src/commands.rs**: Tauri command handlers
-- **src-tauri/src/bitrise.rs**: Bitrise API client
-- **src-tauri/src/adb.rs**: ADB integration
-- **src-tauri/src/fs.rs**: File system & settings persistence
-
-## Key Commands
-
-```bash
-# Development
-npm run tauri-dev          # Run dev mode
-npm run dev               # Frontend only
-
-# Building
-npm run tauri-build       # Build production app
-npm run build             # Build frontend only
-
-# Setup
-./setup.sh                # Initial setup script
+src-tauri/                    # Backend (Rust + Tauri 2)
+├── src/
+│   ├── main.rs               # App entry, plugin/command registration
+│   ├── commands.rs           # #[tauri::command] handlers (IPC endpoints)
+│   ├── bitrise.rs            # BitriseClient (Reqwest HTTP client)
+│   ├── adb.rs                # ADB device detection + APK install
+│   └── fs.rs                 # Settings persistence (~/.bitrise-artifacts/)
+├── Cargo.toml                # Rust deps: tauri 2, tokio, reqwest, serde, anyhow
+└── tauri.conf.json           # Window config, bundle settings, dev server URL
 ```
 
 ## Data Flow
-1. User enters API token → `saveSettings()` → ~/.bitrise-artifacts/settings.json
-2. Token sent to Rust → BitriseClient initialized
-3. Fetch apps → display in sidebar
-4. Select app → fetch builds → group by branch
-5. Select build → fetch artifacts → filter APKs
-6. Download/install APK → invoke Rust command → ADB or file system
 
-## Environment Requirements
-- Node.js v18+
-- Rust (latest stable)
-- ADB (Android Platform Tools)
+1. User enters Bitrise API token in SettingsModal
+2. Token saved to `~/.bitrise-artifacts/settings.json` via Rust `save_settings` command
+3. Frontend calls `get_apps(token)` → Rust fetches from Bitrise API → returns app list
+4. User selects app → `get_builds(slug)` → builds grouped by branch in BuildList
+5. User selects build → `get_artifacts(slug, build)` → APKs shown in ArtifactPanel
+6. Download: `download_artifact()` → cached to `~/.bitrise-artifacts/cache/`
+7. Install: `install_apk(path, device_id)` → ADB command executed by Rust
 
-## Configuration
-Settings stored in: `~/.bitrise-artifacts/settings.json`
-```json
-{
-  "api_token": "your_token_here",
-  "selected_app_slug": "optional-app-slug"
-}
+## Bitrise REST API
+
+Base URL: `https://api.bitrise.io/v0.1` | Auth header: `Authorization: token {api_token}`
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /apps` | List accessible apps |
+| `GET /apps/{slug}/builds?limit=50` | List recent builds |
+| `GET /apps/{slug}/builds/{build}/artifacts` | List build artifacts |
+| `GET /apps/{slug}/builds/{build}/artifacts/{artifact}` | Get artifact download URL |
+
+## IPC Commands (Tauri invoke)
+
+| Command | Args | Returns |
+|---|---|---|
+| `get_apps` | `token` | `App[]` |
+| `get_builds` | `app_slug` | `Build[]` |
+| `get_artifacts` | `app_slug, build_slug` | `Artifact[]` |
+| `download_artifact` | `app_slug, build_slug, artifact_slug, filename` | `string` (cache path) |
+| `save_to_downloads` | `cache_path, file_name` | `string` (downloads path) |
+| `get_connected_devices` | — | `Device[]` |
+| `install_apk` | `apk_path, device_id` | `string` |
+| `save_settings` | `settings: Settings` | — |
+| `load_settings` | — | `Settings` |
+
+## Development
+
+```bash
+npm run tauri-dev      # Full dev mode (Tauri + Vite on port 1420)
+npm run dev            # Vite dev server only
+npm run build          # Build frontend (tsc + vite)
+npm run tauri-build    # Build production desktop bundle
 ```
 
-## API Endpoints Used
-- GET /v0.1/apps
-- GET /v0.1/apps/{slug}/builds
-- GET /v0.1/apps/{slug}/builds/{build}/artifacts
-- GET /v0.1/apps/{slug}/builds/{build}/artifacts/{artifact}
+**Requirements:** Node.js 18+, Rust stable, ADB on PATH (for device features)
 
-## Styling
-- Tailwind CSS with custom dark theme
-- Colors defined in tailwind.config.js
-- Dark mode by default (class strategy)
+## Conventions
 
-## Testing Checklist
-- [ ] Settings save/load
-- [ ] App list fetch
-- [ ] Build list fetch with grouping
-- [ ] Artifact list fetch
-- [ ] APK download
-- [ ] Device detection
-- [ ] APK install via ADB
-- [ ] Error handling for network failures
-- [ ] UI responsiveness
+- **State management:** React hooks in App.tsx (no external state library)
+- **Styling:** Tailwind CSS utility classes, custom dark theme in `tailwind.config.js`
+- **Rust errors:** `anyhow::Result<T>`, converted to `String` for Tauri IPC
+- **All Tauri commands are async** (Tokio runtime)
+- **Settings dir:** `~/.bitrise-artifacts/` contains `settings.json` and `cache/`
+
+## Notes
+
+- Bitrise API client exists in both frontend (`src/api/bitrise.ts`) and backend (`src-tauri/src/bitrise.rs`)
+- No test suite exists — changes should be verified manually
+- ADB integration uses `std::process::Command`, not the Tauri shell plugin
+- Dark mode is always on (Tailwind `class` strategy, `<html class="dark">`)

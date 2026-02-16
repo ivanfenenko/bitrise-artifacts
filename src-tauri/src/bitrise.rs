@@ -21,6 +21,8 @@ pub struct Build {
     #[serde(default)]
     pub slug: Option<String>,
     #[serde(default)]
+    pub build_number: Option<i64>,
+    #[serde(default)]
     pub branch: Option<String>,
     #[serde(default)]
     pub status_text: Option<String>,
