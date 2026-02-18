@@ -181,14 +181,10 @@ export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh, wat
       const buildsToSearch = group.type === "pipeline" ? group.builds : [group.build];
       return buildsToSearch.some((build) => {
         const fields = [
-          build.workflow,
+          build.build_number?.toString(),
           build.branch,
           build.triggered_by,
-          build.commit_message,
           build.commit_hash,
-          build.status_text,
-          build.pull_request_id?.toString(),
-          build.build_number?.toString(),
         ];
         return fields.some((value) => value && value.toLowerCase().includes(q));
       });
@@ -503,6 +499,9 @@ export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh, wat
               value={buildSearch}
               onChange={(e) => setBuildSearch(e.target.value)}
               placeholder="Search builds..."
+              autoCorrect="off"
+              autoCapitalize="none"
+              spellCheck={false}
               className="w-full pl-8 pr-3 py-1.5 bg-background border border-border rounded-md text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-primary"
             />
             {buildSearch && (

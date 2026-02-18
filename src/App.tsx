@@ -25,6 +25,7 @@ function App() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
 
   // Resizable panels
   const [sidebarWidth, setSidebarWidth] = useState(256);
@@ -32,7 +33,16 @@ function App() {
   const hasLoadedWidths = useRef(false);
   const dragging = useRef<"sidebar" | "artifact" | null>(null);
 
+  const persistSettings = useCallback((updates: Partial<Settings>) => {
+    setSettings((prev) => {
+      const newSettings = { ...prev, ...updates };
+      api.saveSettings(newSettings);
+      return newSettings;
+    });
+  }, []);
+
   const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!settingsLoaded) return;
     if (dragging.current === "sidebar") {
       const nextWidth = Math.max(180, Math.min(400, e.clientX));
       setSidebarWidth(nextWidth);
@@ -43,7 +53,7 @@ function App() {
       setArtifactWidth(nextWidth);
       persistSettings({ artifact_width: nextWidth });
     }
-  }, []);
+  }, [persistSettings, settingsLoaded]);
 
   const handleMouseUp = useCallback(() => {
     dragging.current = null;
@@ -110,6 +120,8 @@ function App() {
     } catch (err) {
       setError("Failed to load settings");
       setShowSettings(true);
+    } finally {
+      setSettingsLoaded(true);
     }
   };
 
@@ -145,16 +157,11 @@ function App() {
     }
   };
 
-  const persistSettings = (updates: Partial<Settings>) => {
-    const newSettings = { ...settings, ...updates };
-    setSettings(newSettings);
-    api.saveSettings(newSettings);
-  };
-
   useEffect(() => {
+    if (!settingsLoaded) return;
     if (!settings.api_token && !settings.selected_app_slug && !settings.watchlist_apps) return;
     persistSettings({ downloaded_artifacts: downloadedArtifacts });
-  }, [downloadedArtifacts, settings.api_token, settings.selected_app_slug, settings.watchlist_apps]);
+  }, [downloadedArtifacts, settings.api_token, settings.selected_app_slug, settings.watchlist_apps, settingsLoaded]);
 
   const handleAppSelect = (app: AppType) => {
     setSelectedApp(app);
