@@ -49,3 +49,4 @@ coverage/
 *.tmp
 *.temp
 .cache/
+.tauri-dev.pid
