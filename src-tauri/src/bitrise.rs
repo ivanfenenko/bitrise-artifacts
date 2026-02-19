@@ -161,12 +161,7 @@ impl BitriseClient {
         file_name: &str,
     ) -> anyhow::Result<String> {
         // Get the cache directory
-        let home = dirs::home_dir()
-            .ok_or_else(|| anyhow::anyhow!("Could not get home directory"))?;
-        let cache_dir = home.join(".bitrise-artifacts").join("cache");
-        
-        // Ensure cache directory exists
-        tokio::fs::create_dir_all(&cache_dir).await?;
+        let cache_dir = crate::fs::get_cache_dir()?;
         
         // Create full path
         let save_path = cache_dir.join(file_name);

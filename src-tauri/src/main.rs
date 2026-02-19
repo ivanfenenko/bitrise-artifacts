@@ -32,6 +32,8 @@ fn main() {
             commands::open_path,
             commands::save_settings,
             commands::load_settings,
+            commands::clear_cache,
+            commands::logout,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

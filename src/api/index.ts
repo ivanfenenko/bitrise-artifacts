@@ -143,4 +143,13 @@ export const api = {
   async loadSettings(): Promise<Settings> {
     return invokeWithLogging("load_settings");
   },
+
+  async clearCache(): Promise<void> {
+    return invokeWithLogging("clear_cache");
+  },
+
+  async logout(): Promise<void> {
+    cachedToken = null; // Clear the cached token
+    return invokeWithLogging("logout");
+  },
 };

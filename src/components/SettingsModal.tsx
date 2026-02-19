@@ -1,20 +1,58 @@
 import { useState } from "react";
 import { Settings } from "../types";
-import { X, Eye, EyeOff, Key, AppWindow } from "lucide-react";
+import { X, Eye, EyeOff, Key, AppWindow, Trash2, LogOut } from "lucide-react";
+import { api } from "../api";
 
 interface SettingsModalProps {
   settings: Settings;
   onSave: (settings: Settings) => void;
   onClose: () => void;
+  onLogout: () => void;
 }
 
-export function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
+export function SettingsModal({ settings, onSave, onClose, onLogout }: SettingsModalProps) {
   const [token, setToken] = useState(settings.api_token);
   const [showToken, setShowToken] = useState(false);
+  const [clearingCache, setClearingCache] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSave({ ...settings, api_token: token });
+  };
+
+  const handleClearCache = async () => {
+    if (!confirm("Are you sure you want to delete all cached APKs? This cannot be undone.")) {
+      return;
+    }
+
+    setClearingCache(true);
+    try {
+      await api.clearCache();
+      alert("Cache cleared successfully!");
+    } catch (error) {
+      console.error("Failed to clear cache:", error);
+      alert(`Failed to clear cache: ${error}`);
+    } finally {
+      setClearingCache(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    if (!confirm("Are you sure you want to log out? This will delete all cached data and settings.")) {
+      return;
+    }
+
+    setLoggingOut(true);
+    try {
+      await api.logout();
+      onLogout();
+      onClose();
+    } catch (error) {
+      console.error("Failed to logout:", error);
+      alert(`Failed to logout: ${error}`);
+      setLoggingOut(false);
+    }
   };
 
   return (
@@ -75,6 +113,35 @@ export function SettingsModal({ settings, onSave, onClose }: SettingsModalProps)
               </div>
             </div>
           )}
+
+          {/* Data Management Section */}
+          <div className="pt-4 border-t border-border space-y-3">
+            <h3 className="text-sm font-medium text-text-secondary">Data Management</h3>
+            
+            <button
+              type="button"
+              onClick={handleClearCache}
+              disabled={clearingCache}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-border hover:bg-surface-hover rounded-lg transition-colors text-text-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Trash2 size={16} />
+              {clearingCache ? "Clearing cache..." : "Clear Cache"}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              disabled={loggingOut}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-error/50 hover:bg-error/10 rounded-lg transition-colors text-error disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <LogOut size={16} />
+              {loggingOut ? "Logging out..." : "Log Out"}
+            </button>
+            
+            <p className="text-xs text-text-muted">
+              Clear cache removes all downloaded APKs. Log out deletes all data including settings.
+            </p>
+          </div>
 
           <div className="pt-4 border-t border-border flex gap-2">
             <button

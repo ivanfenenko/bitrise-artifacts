@@ -42,6 +42,24 @@ function App() {
     });
   }, []);
 
+  const handleLogout = useCallback(() => {
+    // Reset all state to initial values
+    setSettings({ api_token: "" });
+    setWatchlistApps([]);
+    setWatchlistBranches({});
+    setSelectedApp(null);
+    setSelectedBranch(null);
+    setBuilds([]);
+    setSelectedBuild(null);
+    setDownloadedArtifacts({});
+    setNextCursor(undefined);
+    setError(null);
+    setCachedToken("");
+    
+    // Show settings modal to enter new token
+    setShowSettings(true);
+  }, []);
+
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!settingsLoaded) return;
     if (dragging.current === "sidebar") {
@@ -434,6 +452,7 @@ function App() {
               setShowSettings(false);
             }
           }}
+          onLogout={handleLogout}
         />
       )}
 

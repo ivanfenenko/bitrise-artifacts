@@ -226,3 +226,18 @@ pub async fn save_settings(settings: Settings) -> Result<(), String> {
 pub async fn load_settings() -> Result<Settings, String> {
     fs::load_settings().await.map_err(|e: anyhow::Error| e.to_string())
 }
+
+#[tauri::command]
+pub async fn clear_cache() -> Result<(), String> {
+    fs::clear_cache().await.map_err(|e: anyhow::Error| e.to_string())
+}
+
+#[tauri::command]
+pub async fn logout(state: State<'_, AppState>) -> Result<(), String> {
+    // Clear the Bitrise client
+    let mut guard = state.bitrise_client.lock().await;
+    *guard = None;
+    
+    // Clear all data (settings, cache, etc.)
+    fs::clear_all_data().await.map_err(|e: anyhow::Error| e.to_string())
+}
