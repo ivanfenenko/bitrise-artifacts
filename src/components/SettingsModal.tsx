@@ -45,18 +45,26 @@ export function SettingsModal({ settings, onSave, onClose, onLogout }: SettingsM
   };
 
   const handleLogout = async () => {
-    const confirmed = await ask("Are you sure you want to log out? This will delete all cached data and settings.", {
-      title: "Log Out",
-      kind: "warning",
-    });
+    console.log("handleLogout called");
     
-    if (!confirmed) {
-      return;
-    }
-
-    setLoggingOut(true);
     try {
+      const confirmed = await ask("Are you sure you want to log out? This will delete all cached data and settings.", {
+        title: "Log Out",
+        kind: "warning",
+      });
+      
+      console.log("User confirmed:", confirmed);
+      
+      if (!confirmed) {
+        return;
+      }
+
+      setLoggingOut(true);
+      console.log("Calling api.logout()...");
+      
       await api.logout();
+      console.log("Logout successful, calling onLogout callback...");
+      
       onLogout();
       onClose();
     } catch (error) {
@@ -141,7 +149,10 @@ export function SettingsModal({ settings, onSave, onClose, onLogout }: SettingsM
 
             <button
               type="button"
-              onClick={handleLogout}
+              onClick={(e) => {
+                console.log("Logout button clicked", e);
+                handleLogout();
+              }}
               disabled={loggingOut}
               className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-error/50 hover:bg-error/10 rounded-lg transition-colors text-error disabled:opacity-50 disabled:cursor-not-allowed"
             >
