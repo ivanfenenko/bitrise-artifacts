@@ -24,6 +24,10 @@
       "identifier": "fs:allow-mkdir",
       "allow": [{ "path": "$HOME/.bitrise-artifacts/**" }]
     },
+    {
+      "identifier": "fs:allow-remove",
+      "allow": [{ "path": "$HOME/.bitrise-artifacts/**" }]
+    },
     "http:default",
     {
       "identifier": "http:allow-fetch",
@@ -31,6 +35,10 @@
         { "url": "https://api.bitrise.io/**" },
         { "url": "https://**" }
       ]
-    }
+    },
+    "dialog:default",
+    "dialog:allow-ask",
+    "dialog:allow-message",
+    "dialog:allow-confirm"
   ]
 }
