@@ -49,7 +49,38 @@ Before you begin, ensure you have the following installed:
 
 ## Installation
 
-### Option 1: Quick Setup (Recommended)
+### Download Pre-built Binaries
+
+Download the latest release from the [Releases page](https://github.com/ivanfenenko/bitrise-artifacts/releases).
+
+**Available for:**
+- macOS (Intel, Apple Silicon, Universal)
+- Windows (64-bit)
+- Linux (Debian, RPM, AppImage)
+
+#### macOS Installation Notes
+
+Since the app is not signed with an Apple Developer certificate, you'll see a security warning on first launch. To open the app:
+
+**Method 1: Right-click to open**
+1. Right-click (or Control+click) on "Bitrise Artifacts"
+2. Select "Open"
+3. Click "Open" in the dialog
+
+**Method 2: System Settings**
+1. Try to open the app (it will be blocked)
+2. Go to System Settings → Privacy & Security
+3. Scroll down to find "Bitrise Artifacts was blocked"
+4. Click "Open Anyway"
+
+**Method 3: Command line**
+```bash
+xattr -cr "/Applications/Bitrise Artifacts.app"
+```
+
+### Development Setup
+
+#### Option 1: Quick Setup (Recommended)
 
 1. **Clone the repository**
    ```bash
@@ -67,7 +98,7 @@ Before you begin, ensure you have the following installed:
    npm run tauri-dev
    ```
 
-### Option 2: Manual Project Setup
+#### Option 2: Manual Project Setup
 
 If you want to recreate the project from scratch:
 
