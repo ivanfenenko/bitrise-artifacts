@@ -28,10 +28,11 @@ function App() {
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
   // Resizable panels
-  const [sidebarWidth, setSidebarWidth] = useState(256);
+  const [sidebarWidth, setSidebarWidth] = useState(400);
   const [artifactWidth, setArtifactWidth] = useState(450);
   const hasLoadedWidths = useRef(false);
   const dragging = useRef<"sidebar" | "artifact" | null>(null);
+  const saveWidthTimeout = useRef<number | null>(null);
 
   const persistSettings = useCallback((updates: Partial<Settings>) => {
     setSettings((prev) => {
@@ -46,20 +47,49 @@ function App() {
     if (dragging.current === "sidebar") {
       const nextWidth = Math.max(180, Math.min(400, e.clientX));
       setSidebarWidth(nextWidth);
-      persistSettings({ sidebar_width: nextWidth });
+      
+      // Debounce saving to avoid too many writes
+      if (saveWidthTimeout.current) {
+        window.clearTimeout(saveWidthTimeout.current);
+      }
+      saveWidthTimeout.current = window.setTimeout(() => {
+        persistSettings({ sidebar_width: nextWidth });
+      }, 100);
     } else if (dragging.current === "artifact") {
       const fromRight = window.innerWidth - e.clientX;
       const nextWidth = Math.max(280, Math.min(700, fromRight));
       setArtifactWidth(nextWidth);
-      persistSettings({ artifact_width: nextWidth });
+      
+      // Debounce saving to avoid too many writes
+      if (saveWidthTimeout.current) {
+        window.clearTimeout(saveWidthTimeout.current);
+      }
+      saveWidthTimeout.current = window.setTimeout(() => {
+        persistSettings({ artifact_width: nextWidth });
+      }, 100);
     }
   }, [persistSettings, settingsLoaded]);
 
   const handleMouseUp = useCallback(() => {
+    if (dragging.current && settingsLoaded) {
+      // Clear any pending debounced save
+      if (saveWidthTimeout.current) {
+        window.clearTimeout(saveWidthTimeout.current);
+        saveWidthTimeout.current = null;
+      }
+      
+      // Immediately save the final width
+      if (dragging.current === "sidebar") {
+        persistSettings({ sidebar_width: sidebarWidth });
+      } else if (dragging.current === "artifact") {
+        persistSettings({ artifact_width: artifactWidth });
+      }
+    }
+    
     dragging.current = null;
     document.body.style.cursor = "";
     document.body.style.userSelect = "";
-  }, []);
+  }, [sidebarWidth, artifactWidth, persistSettings, settingsLoaded]);
 
   useEffect(() => {
     document.addEventListener("mousemove", handleMouseMove);
