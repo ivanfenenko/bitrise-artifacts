@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Settings } from "../types";
 import { X, Eye, EyeOff, Key, AppWindow, Trash2, LogOut } from "lucide-react";
 import { api } from "../api";
+import { ask } from "@tauri-apps/plugin-dialog";
 
 interface SettingsModalProps {
   settings: Settings;
@@ -22,24 +23,34 @@ export function SettingsModal({ settings, onSave, onClose, onLogout }: SettingsM
   };
 
   const handleClearCache = async () => {
-    if (!confirm("Are you sure you want to delete all cached APKs? This cannot be undone.")) {
+    const confirmed = await ask("Are you sure you want to delete all cached APKs? This cannot be undone.", {
+      title: "Clear Cache",
+      kind: "warning",
+    });
+    
+    if (!confirmed) {
       return;
     }
 
     setClearingCache(true);
     try {
       await api.clearCache();
-      alert("Cache cleared successfully!");
+      await ask("Cache cleared successfully!", { title: "Success", kind: "info" });
     } catch (error) {
       console.error("Failed to clear cache:", error);
-      alert(`Failed to clear cache: ${error}`);
+      await ask(`Failed to clear cache: ${error}`, { title: "Error", kind: "error" });
     } finally {
       setClearingCache(false);
     }
   };
 
   const handleLogout = async () => {
-    if (!confirm("Are you sure you want to log out? This will delete all cached data and settings.")) {
+    const confirmed = await ask("Are you sure you want to log out? This will delete all cached data and settings.", {
+      title: "Log Out",
+      kind: "warning",
+    });
+    
+    if (!confirmed) {
       return;
     }
 
@@ -50,7 +61,7 @@ export function SettingsModal({ settings, onSave, onClose, onLogout }: SettingsM
       onClose();
     } catch (error) {
       console.error("Failed to logout:", error);
-      alert(`Failed to logout: ${error}`);
+      await ask(`Failed to logout: ${error}`, { title: "Error", kind: "error" });
       setLoggingOut(false);
     }
   };
