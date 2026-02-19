@@ -7,7 +7,13 @@ import { ArtifactPanel } from "./components/ArtifactPanel";
 import { SettingsModal } from "./components/SettingsModal";
 import { AddAppModal } from "./components/AddAppModal";
 import { DeviceBar } from "./components/DeviceBar";
+import { Toast } from "./components/Toast";
 import { Loader2, Settings as SettingsIcon } from "lucide-react";
+
+interface ToastState {
+  message: string;
+  type: "success" | "error";
+}
 
 function App() {
   const [settings, setSettings] = useState<Settings>({ api_token: "" });
@@ -26,6 +32,11 @@ function App() {
   const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [toast, setToast] = useState<ToastState | null>(null);
+
+  const showToast = useCallback((message: string, type: "success" | "error") => {
+    setToast({ message, type });
+  }, []);
 
   // Resizable panels
   const [sidebarWidth, setSidebarWidth] = useState(400);
@@ -453,6 +464,7 @@ function App() {
             }
           }}
           onLogout={handleLogout}
+          onShowToast={showToast}
         />
       )}
 
@@ -464,6 +476,15 @@ function App() {
           onAddApp={handleAddToWatchlist}
           onRemoveApp={handleRemoveFromWatchlist}
           onClose={() => setShowAddApp(false)}
+        />
+      )}
+
+      {/* Toast Notification */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
         />
       )}
     </div>

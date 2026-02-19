@@ -9,9 +9,10 @@ interface SettingsModalProps {
   onSave: (settings: Settings) => void;
   onClose: () => void;
   onLogout: () => void;
+  onShowToast: (message: string, type: "success" | "error") => void;
 }
 
-export function SettingsModal({ settings, onSave, onClose, onLogout }: SettingsModalProps) {
+export function SettingsModal({ settings, onSave, onClose, onLogout, onShowToast }: SettingsModalProps) {
   const [token, setToken] = useState(settings.api_token);
   const [showToken, setShowToken] = useState(false);
   const [clearingCache, setClearingCache] = useState(false);
@@ -35,41 +36,35 @@ export function SettingsModal({ settings, onSave, onClose, onLogout }: SettingsM
     setClearingCache(true);
     try {
       await api.clearCache();
-      await ask("Cache cleared successfully!", { title: "Success", kind: "info" });
+      onShowToast("Cache cleared successfully!", "success");
     } catch (error) {
       console.error("Failed to clear cache:", error);
-      await ask(`Failed to clear cache: ${error}`, { title: "Error", kind: "error" });
+      onShowToast(`Failed to clear cache: ${error}`, "error");
     } finally {
       setClearingCache(false);
     }
   };
 
   const handleLogout = async () => {
-    console.log("handleLogout called");
+    const confirmed = await ask("Are you sure you want to log out? This will delete all cached data and settings.", {
+      title: "Log Out",
+      kind: "warning",
+    });
     
-    try {
-      const confirmed = await ask("Are you sure you want to log out? This will delete all cached data and settings.", {
-        title: "Log Out",
-        kind: "warning",
-      });
-      
-      console.log("User confirmed:", confirmed);
-      
-      if (!confirmed) {
-        return;
-      }
+    if (!confirmed) {
+      return;
+    }
 
-      setLoggingOut(true);
-      console.log("Calling api.logout()...");
-      
+    setLoggingOut(true);
+    try {
       await api.logout();
-      console.log("Logout successful, calling onLogout callback...");
-      
+      onShowToast("Logged out successfully", "success");
       onLogout();
       onClose();
     } catch (error) {
       console.error("Failed to logout:", error);
-      await ask(`Failed to logout: ${error}`, { title: "Error", kind: "error" });
+      onShowToast(`Failed to logout: ${error}`, "error");
+    } finally {
       setLoggingOut(false);
     }
   };
@@ -147,21 +142,20 @@ export function SettingsModal({ settings, onSave, onClose, onLogout }: SettingsM
               {clearingCache ? "Clearing cache..." : "Clear Cache"}
             </button>
 
-            <button
-              type="button"
-              onClick={(e) => {
-                console.log("Logout button clicked", e);
-                handleLogout();
-              }}
-              disabled={loggingOut}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-error/50 hover:bg-error/10 rounded-lg transition-colors text-error disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <LogOut size={16} />
-              {loggingOut ? "Logging out..." : "Log Out"}
-            </button>
+            {settings.api_token && (
+              <button
+                type="button"
+                onClick={handleLogout}
+                disabled={loggingOut}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-error/50 hover:bg-error/10 rounded-lg transition-colors text-error disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <LogOut size={16} />
+                {loggingOut ? "Logging out..." : "Log Out"}
+              </button>
+            )}
             
             <p className="text-xs text-text-muted">
-              Clear cache removes all downloaded APKs. Log out deletes all data including settings.
+              Clear cache removes all downloaded APKs.{settings.api_token && " Log out deletes all data including settings."}
             </p>
           </div>
 
