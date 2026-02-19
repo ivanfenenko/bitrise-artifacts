@@ -456,7 +456,7 @@ export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh, wat
                       <Layers size={11} />
                       {group.builds.length}
                     </span>
-                    {!activeBranchFilter && first.branch && renderWatchButton(first.branch)}
+                    {first.branch && renderWatchButton(first.branch)}
                   </div>
                   <span className="text-xs text-text-muted shrink-0">
                     {formatTriggeredAt(first.triggered_at)}
