@@ -261,18 +261,24 @@ export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh, wat
   };
 
   const renderWatchButton = (branch: string) => {
-    if (watchedSet.has(branch)) return null;
+    const isWatched = watchedSet.has(branch);
     return (
       <button
         onClick={(e) => {
           e.stopPropagation();
-          onAddBranch(branch);
+          if (!isWatched) {
+            onAddBranch(branch);
+          }
         }}
-        className="flex items-center gap-1 px-2 py-1 rounded-md border border-border text-xs text-text-muted hover:text-primary hover:border-primary/50 hover:bg-primary/10 transition-colors shrink-0"
-        title="Watch this branch"
+        className={`flex items-center gap-1 px-2 py-1 rounded-md border text-xs transition-colors shrink-0 ${
+          isWatched
+            ? "border-primary/50 bg-primary/10 text-primary cursor-default"
+            : "border-border text-text-muted hover:text-primary hover:border-primary/50 hover:bg-primary/10"
+        }`}
+        title={isWatched ? "Branch is watched" : "Watch this branch"}
       >
-        <Bookmark size={14} />
-        <span>Watch</span>
+        <Bookmark size={14} className={isWatched ? "fill-current" : ""} />
+        <span>{isWatched ? "Watched" : "Watch"}</span>
       </button>
     );
   };
@@ -326,23 +332,9 @@ export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh, wat
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="text-xs text-text-muted">
-                  {formatTriggeredAt(build.triggered_at)}
-                </span>
-                {bitriseUrl && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      open(bitriseUrl);
-                    }}
-                    className="p-1 rounded hover:bg-surface-hover text-text-muted hover:text-primary transition-colors"
-                    title="Open in Bitrise"
-                  >
-                    <ExternalLink size={14} />
-                  </button>
-                )}
-              </div>
+              <span className="text-xs text-text-muted shrink-0">
+                {formatTriggeredAt(build.triggered_at)}
+              </span>
             </div>
 
             {/* Row 2: Branch and User info - PROMINENT */}
@@ -450,7 +442,7 @@ export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh, wat
               {/* Status bar */}
               <div className={`w-1 shrink-0 ${statusBarColor(status)}`} />
               <div className="flex-1 p-3 min-w-0">
-                {/* Row 1: expand + status + build number + workflow count + date */}
+                {/* Row 1: expand + status + build number + workflow count + watch button + date */}
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
                     {expanded
@@ -464,6 +456,7 @@ export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh, wat
                       <Layers size={11} />
                       {group.builds.length}
                     </span>
+                    {!activeBranchFilter && first.branch && renderWatchButton(first.branch)}
                   </div>
                   <span className="text-xs text-text-muted shrink-0">
                     {formatTriggeredAt(first.triggered_at)}
@@ -540,13 +533,6 @@ export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh, wat
               </div>
             </div>
           </button>
-
-          {/* Watch button — outside the toggle button so it doesn't collapse/expand */}
-          {first.branch && !watchedSet.has(first.branch) && (
-            <div className="pl-12 pb-2">
-              {renderWatchButton(first.branch)}
-            </div>
-          )}
         </div>
 
         {/* Expanded child workflows */}
