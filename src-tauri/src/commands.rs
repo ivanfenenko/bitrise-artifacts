@@ -119,6 +119,24 @@ pub async fn install_and_launch_apk(
 }
 
 #[tauri::command]
+pub async fn uninstall_apk(
+    packageName: String,
+    deviceId: Option<String>,
+) -> Result<String, String> {
+    adb::uninstall_apk(&packageName, deviceId.as_deref())
+        .await
+        .map_err(|e: anyhow::Error| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_package_name(
+    apkPath: String,
+) -> Result<String, String> {
+    adb::get_package_name(&apkPath)
+        .map_err(|e: anyhow::Error| e.to_string())
+}
+
+#[tauri::command]
 pub async fn save_to_downloads(
     cachePath: String,
     fileName: String,

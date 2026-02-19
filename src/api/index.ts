@@ -112,6 +112,19 @@ export const api = {
     });
   },
 
+  async uninstallApk(packageName: string, deviceId?: string): Promise<string> {
+    return invokeWithLogging("uninstall_apk", {
+      packageName,
+      deviceId,
+    });
+  },
+
+  async getPackageName(apkPath: string): Promise<string> {
+    return invokeWithLogging("get_package_name", {
+      apkPath,
+    });
+  },
+
   async saveToDownloads(cachePath: string, fileName: string): Promise<string> {
     return invokeWithLogging("save_to_downloads", {
       cachePath,

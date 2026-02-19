@@ -35,6 +35,11 @@ export function ArtifactPanel({ build, appSlug, downloadedArtifacts, onUpdateDow
   const [snackbar, setSnackbar] = useState<
     { type: "success" | "error"; message: string } | null
   >(null);
+  const [versionMismatchDialog, setVersionMismatchDialog] = useState<{
+    apkPath: string;
+    deviceId?: string;
+    packageName: string;
+  } | null>(null);
 
   useEffect(() => {
     if (build && appSlug) {
@@ -215,10 +220,29 @@ export function ArtifactPanel({ build, appSlug, downloadedArtifacts, onUpdateDow
       });
     } catch (err) {
       console.error("Install failed:", err);
-      setSnackbar({
-        type: "error",
-        message: "Failed to install or launch APK: " + (err instanceof Error ? err.message : String(err)),
-      });
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      
+      // Check if error is due to version mismatch
+      if (errorMessage.includes("INSTALL_FAILED_VERSION_DOWNGRADE") || 
+          errorMessage.includes("INSTALL_FAILED_UPDATE_INCOMPATIBLE") ||
+          errorMessage.includes("signatures do not match")) {
+        // Get package name and show dialog
+        try {
+          const packageName = await api.getPackageName(apkPath);
+          setVersionMismatchDialog({ apkPath, deviceId, packageName });
+        } catch (pkgErr) {
+          console.error("Failed to get package name:", pkgErr);
+          setSnackbar({
+            type: "error",
+            message: "Installation failed due to version mismatch, but could not determine package name: " + errorMessage,
+          });
+        }
+      } else {
+        setSnackbar({
+          type: "error",
+          message: "Failed to install or launch APK: " + errorMessage,
+        });
+      }
     }
   };
 
@@ -270,6 +294,38 @@ export function ArtifactPanel({ build, appSlug, downloadedArtifacts, onUpdateDow
 
   const handleCloseDevicePicker = () => {
     setDevicePicker(null);
+    setInstallingSlug(null);
+  };
+
+  const handleUninstallAndReinstall = async () => {
+    if (!versionMismatchDialog) return;
+    
+    const { apkPath, deviceId, packageName } = versionMismatchDialog;
+    setVersionMismatchDialog(null);
+    
+    try {
+      // Uninstall the existing app
+      await api.uninstallApk(packageName, deviceId);
+      setSnackbar({
+        type: "success",
+        message: "Uninstalled existing app. Installing new version...",
+      });
+      
+      // Install the new version
+      await installApkToDevice(apkPath, deviceId);
+    } catch (err) {
+      console.error("Uninstall and reinstall failed:", err);
+      setSnackbar({
+        type: "error",
+        message: "Failed to uninstall and reinstall: " + (err instanceof Error ? err.message : String(err)),
+      });
+    } finally {
+      setInstallingSlug(null);
+    }
+  };
+
+  const handleCancelUninstall = () => {
+    setVersionMismatchDialog(null);
     setInstallingSlug(null);
   };
 
@@ -528,6 +584,46 @@ export function ArtifactPanel({ build, appSlug, downloadedArtifacts, onUpdateDow
               >
                 Cancel
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {versionMismatchDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-surface border border-border rounded-xl shadow-xl w-full max-w-md mx-4">
+            <div className="flex items-center justify-between p-4 border-b border-border">
+              <h2 className="text-lg font-semibold text-text-primary">Version Mismatch</h2>
+              <button
+                onClick={handleCancelUninstall}
+                className="p-1 hover:bg-surface-hover rounded-lg transition-colors"
+              >
+                <X size={20} className="text-text-secondary" />
+              </button>
+            </div>
+            <div className="p-4">
+              <p className="text-sm text-text-secondary mb-4">
+                Installation failed because an incompatible version of this app is already installed on the device.
+              </p>
+              <p className="text-sm text-text-primary mb-2">
+                Package: <span className="font-mono text-xs">{versionMismatchDialog.packageName}</span>
+              </p>
+              <p className="text-sm text-text-secondary mb-4">
+                Would you like to uninstall the current version and install the selected APK?
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleCancelUninstall}
+                  className="flex-1 px-4 py-2 border border-border hover:bg-surface-hover rounded-lg transition-colors text-text-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUninstallAndReinstall}
+                  className="flex-1 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors"
+                >
+                  Uninstall & Reinstall
+                </button>
+              </div>
             </div>
           </div>
         </div>

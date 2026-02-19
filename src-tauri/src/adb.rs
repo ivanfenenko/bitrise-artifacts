@@ -98,7 +98,7 @@ pub async fn install_apk(apk_path: &str, device_id: Option<&str>) -> anyhow::Res
     }
 }
 
-fn get_package_name(apk_path: &str) -> anyhow::Result<String> {
+pub fn get_package_name(apk_path: &str) -> anyhow::Result<String> {
     let apk = Apk::new(apk_path).map_err(|e| anyhow::anyhow!("Failed to read APK: {}", e))?;
     let package = apk.get_package_name().ok_or_else(|| anyhow::anyhow!("Package name not found in APK"))?;
     Ok(package)
@@ -127,6 +127,25 @@ fn launch_package(package_name: &str, device_id: Option<&str>) -> anyhow::Result
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr);
         anyhow::bail!("Launch failed: {}", stderr);
+    }
+}
+
+pub async fn uninstall_apk(package_name: &str, device_id: Option<&str>) -> anyhow::Result<String> {
+    let mut cmd = Command::new("adb");
+    
+    if let Some(id) = device_id {
+        cmd.args(&["-s", id]);
+    }
+    
+    cmd.args(&["uninstall", package_name]);
+    
+    let output = cmd.output()?;
+    
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("Uninstall failed: {}", stderr);
     }
 }
 

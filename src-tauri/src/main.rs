@@ -26,6 +26,8 @@ fn main() {
             commands::get_connected_devices,
             commands::install_apk,
             commands::install_and_launch_apk,
+            commands::uninstall_apk,
+            commands::get_package_name,
             commands::save_to_downloads,
             commands::open_path,
             commands::save_settings,
