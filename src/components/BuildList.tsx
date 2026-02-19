@@ -7,7 +7,7 @@ import {
   ChevronRight, ChevronDown, Layers, Bookmark,
   CircleSlash, CircleDashed, CirclePause,
   GitBranch, GitCommitHorizontal, Clock, ArrowRight, ExternalLink,
-  Filter, Search, X,
+  Filter, Search, X, ChevronsUpDown,
 } from "lucide-react";
 import { api } from "../api";
 
@@ -124,6 +124,7 @@ function statusBarColor(status?: string): string {
 export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh, watchedBranches, onAddBranch, statusFilter, hasMore, loadingMore, onLoadMore, appSlug, activeBranchFilter, onBranchFilter }: BuildListProps) {
   const watchedSet = useMemo(() => new Set(watchedBranches), [watchedBranches]);
   const [expandedPipelines, setExpandedPipelines] = useState<Set<number>>(new Set());
+  const [expandedCommits, setExpandedCommits] = useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
   const [showBranchPicker, setShowBranchPicker] = useState(false);
   const [allBranches, setAllBranches] = useState<string[]>([]);
@@ -203,6 +204,18 @@ export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh, wat
     });
   };
 
+  const toggleCommitMessage = (buildSlug: string) => {
+    setExpandedCommits((prev) => {
+      const next = new Set(prev);
+      if (next.has(buildSlug)) {
+        next.delete(buildSlug);
+      } else {
+        next.add(buildSlug);
+      }
+      return next;
+    });
+  };
+
   const statusIcon = (icon: React.ReactNode, label: string) => (
     <span className="relative group/status inline-flex">
       {icon}
@@ -237,36 +250,14 @@ export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh, wat
     selectedBuild?.slug != null && build.slug != null && selectedBuild.slug === build.slug;
 
   const getBitriseUrl = (build: Build): string | null => {
-    if (!appSlug) return null;
-    if (build.pipeline_id) {
-      return `https://app.bitrise.io/app/${appSlug}/pipelines/${build.pipeline_id}`;
-    }
-    if (build.slug) {
-      return `https://app.bitrise.io/build/${build.slug}`;
-    }
-    return null;
+    if (!appSlug || !build.slug) return null;
+    return `https://app.bitrise.io/build/${build.slug}`;
   };
 
   const handleContextMenu = (e: React.MouseEvent, url: string | null) => {
     if (!url) return;
     e.preventDefault();
     setContextMenu({ x: e.clientX, y: e.clientY, url });
-  };
-
-  const renderBranchTag = (branch: string | undefined, targetBranch?: string) => {
-    if (!branch) return null;
-    return (
-      <div className="flex items-center gap-1.5 min-w-0">
-        <GitBranch size={13} className="text-text-muted shrink-0" />
-        <span className="text-xs text-text-secondary truncate">{branch}</span>
-        {targetBranch && (
-          <>
-            <ArrowRight size={11} className="text-text-muted shrink-0" />
-            <span className="text-xs text-text-muted truncate">{targetBranch}</span>
-          </>
-        )}
-      </div>
-    );
   };
 
   const renderWatchButton = (branch: string) => {
@@ -303,12 +294,13 @@ export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh, wat
   const renderBuildButton = (build: Build, indented: boolean) => {
     const duration = getDuration(build);
     const hash = shortHash(build.commit_hash);
+    const bitriseUrl = getBitriseUrl(build);
 
     return (
       <button
         key={build.slug || Math.random()}
         onClick={() => onSelectBuild(build)}
-        onContextMenu={(e) => handleContextMenu(e, getBitriseUrl(build))}
+        onContextMenu={(e) => handleContextMenu(e, bitriseUrl)}
         className={`w-full rounded-lg text-left transition-all border overflow-hidden ${
           indented ? "ml-4 w-[calc(100%-1rem)]" : ""
         } ${
@@ -321,51 +313,105 @@ export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh, wat
           {/* Status bar */}
           <div className={`w-1 shrink-0 ${statusBarColor(build.status_text)}`} />
           <div className="flex-1 p-3 min-w-0">
-            {/* Row 1: status + workflow + date */}
+            {/* Row 1: status + workflow + build number + date */}
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 min-w-0">
                 {getStatusIcon(build.status_text)}
                 <span className="text-sm font-medium text-text-primary truncate">
                   {build.workflow || "Unknown Workflow"}
                 </span>
+                {build.build_number && (
+                  <span className="text-sm font-semibold text-primary">
+                    #{build.build_number}
+                  </span>
+                )}
               </div>
-              <span className="text-xs text-text-muted shrink-0">
-                {formatTriggeredAt(build.triggered_at)}
-              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-xs text-text-muted">
+                  {formatTriggeredAt(build.triggered_at)}
+                </span>
+                {bitriseUrl && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      open(bitriseUrl);
+                    }}
+                    className="p-1 rounded hover:bg-surface-hover text-text-muted hover:text-primary transition-colors"
+                    title="Open in Bitrise"
+                  >
+                    <ExternalLink size={14} />
+                  </button>
+                )}
+              </div>
             </div>
 
-            {/* Row 2: commit message */}
-            {build.commit_message && (
-              <p className="mt-1.5 text-xs text-text-secondary line-clamp-3">
-                {build.commit_message}
-              </p>
+            {/* Row 2: Branch and User info - PROMINENT */}
+            <div className="mt-2 flex items-center gap-3 flex-wrap">
+              {!indented && build.branch && (
+                <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-hover">
+                  <GitBranch size={14} className="text-primary shrink-0" />
+                  <span className="text-sm font-medium text-text-primary truncate">{build.branch}</span>
+                  {build.pull_request_target_branch && (
+                    <>
+                      <ArrowRight size={12} className="text-text-muted shrink-0" />
+                      <span className="text-sm text-text-secondary truncate">{build.pull_request_target_branch}</span>
+                    </>
+                  )}
+                </div>
+              )}
+              {(build.triggered_by || build.pull_request_author) && (
+                <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-hover">
+                  <User size={14} className="text-primary shrink-0" />
+                  <span className="text-sm font-medium text-text-primary">
+                    {build.pull_request_author || build.triggered_by}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Row 3: commit message */}
+            {!!build.commit_message && !indented && (
+              <div className="mt-2 ml-6 pl-2 border-l-2 border-border">
+                <div className="flex items-start gap-2">
+                  <p className={`text-sm text-text-secondary leading-relaxed flex-1 ${
+                    expandedCommits.has(build.slug || '') ? '' : 'line-clamp-2'
+                  }`}>
+                    {build.commit_message}
+                  </p>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleCommitMessage(build.slug || '');
+                    }}
+                    className="shrink-0 p-0.5 rounded hover:bg-surface-hover text-text-muted hover:text-primary transition-colors"
+                    title={expandedCommits.has(build.slug || '') ? "Collapse" : "Expand"}
+                  >
+                    <ChevronsUpDown size={14} />
+                  </button>
+                </div>
+              </div>
             )}
 
-            {/* Row 3: metadata chips */}
-            <div className="mt-2 flex items-center gap-3 flex-wrap">
-              {!indented && renderBranchTag(build.branch, build.pull_request_target_branch)}
-              {build.pull_request_id && (
-                <span className="text-xs text-text-muted">#{build.pull_request_id}</span>
-              )}
-              {hash && (
-                <div className="flex items-center gap-1">
-                  <GitCommitHorizontal size={12} className="text-text-muted" />
-                  <span className="text-xs font-mono text-text-muted">{hash}</span>
-                </div>
-              )}
-              {duration && (
-                <div className="flex items-center gap-1">
-                  <Clock size={12} className="text-text-muted" />
-                  <span className="text-xs text-text-muted">{duration}</span>
-                </div>
-              )}
-              {build.triggered_by && (
-                <div className="flex items-center gap-1">
-                  <User size={12} className="text-text-muted" />
-                  <span className="text-xs text-text-muted">{build.triggered_by}</span>
-                </div>
-              )}
-            </div>
+            {/* Row 4: metadata chips */}
+            {(build.pull_request_id || hash || duration) && (
+              <div className="mt-2 flex items-center gap-3 flex-wrap">
+                {!!build.pull_request_id && (
+                  <span className="text-xs text-text-muted">PR #{build.pull_request_id}</span>
+                )}
+                {!!hash && (
+                  <div className="flex items-center gap-1">
+                    <GitCommitHorizontal size={12} className="text-text-muted" />
+                    <span className="text-xs font-mono text-text-muted">{hash}</span>
+                  </div>
+                )}
+                {!!duration && (
+                  <div className="flex items-center gap-1">
+                    <Clock size={12} className="text-text-muted" />
+                    <span className="text-xs text-text-muted">{duration}</span>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Watch button for standalone builds */}
             {!indented && build.branch && !watchedSet.has(build.branch) && (
@@ -390,7 +436,6 @@ export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh, wat
     return (
       <div key={`pipeline-${group.buildNumber}`}>
         <div
-          onContextMenu={(e) => handleContextMenu(e, getBitriseUrl(first))}
           className={`rounded-lg border overflow-hidden transition-all ${
             hasSelectedChild && !expanded
               ? "bg-primary/10 border-primary/50"
@@ -412,7 +457,7 @@ export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh, wat
                       ? <ChevronDown size={16} className="text-text-muted shrink-0" />
                       : <ChevronRight size={16} className="text-text-muted shrink-0" />}
                     {getStatusIcon(status)}
-                    <span className="text-sm font-semibold text-text-primary">
+                    <span className="text-base font-bold text-primary">
                       #{group.buildNumber}
                     </span>
                     <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-surface-hover text-text-secondary">
@@ -425,32 +470,73 @@ export function BuildList({ builds, selectedBuild, onSelectBuild, onRefresh, wat
                   </span>
                 </div>
 
-                {/* Row 2: commit message */}
-                {first.commit_message && (
-                  <p className="mt-1.5 text-xs text-text-secondary line-clamp-3 ml-8">
-                    {first.commit_message}
-                  </p>
-                )}
-
-                {/* Row 3: metadata */}
-                <div className="mt-2 ml-8 flex items-center gap-3 flex-wrap">
-                  {renderBranchTag(first.branch, first.pull_request_target_branch)}
-                  {first.pull_request_id && (
-                    <span className="text-xs text-text-muted">#{first.pull_request_id}</span>
-                  )}
-                  {hash && (
-                    <div className="flex items-center gap-1">
-                      <GitCommitHorizontal size={12} className="text-text-muted" />
-                      <span className="text-xs font-mono text-text-muted">{hash}</span>
+                {/* Row 2: Branch and User info - PROMINENT */}
+                <div className="mt-2 flex items-center gap-3 flex-wrap">
+                  {first.branch && (
+                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-hover">
+                      <GitBranch size={14} className="text-primary shrink-0" />
+                      <span className="text-sm font-medium text-text-primary truncate">{first.branch}</span>
+                      {first.pull_request_target_branch && (
+                        <>
+                          <ArrowRight size={12} className="text-text-muted shrink-0" />
+                          <span className="text-sm text-text-secondary truncate">{first.pull_request_target_branch}</span>
+                        </>
+                      )}
                     </div>
                   )}
-                  {duration && (
-                    <div className="flex items-center gap-1">
-                      <Clock size={12} className="text-text-muted" />
-                      <span className="text-xs text-text-muted">{duration}</span>
+                  {(first.triggered_by || first.pull_request_author) && (
+                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-hover">
+                      <User size={14} className="text-primary shrink-0" />
+                      <span className="text-sm font-medium text-text-primary">
+                        {first.pull_request_author || first.triggered_by}
+                      </span>
                     </div>
                   )}
                 </div>
+
+                {/* Row 3: commit message */}
+                {!!first.commit_message && (
+                  <div className="mt-2 ml-6 pl-2 border-l-2 border-border">
+                    <div className="flex items-start gap-2">
+                      <p className={`text-sm text-text-secondary leading-relaxed flex-1 ${
+                        expandedCommits.has(`pipeline-${group.buildNumber}`) ? '' : 'line-clamp-2'
+                      }`}>
+                        {first.commit_message}
+                      </p>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleCommitMessage(`pipeline-${group.buildNumber}`);
+                        }}
+                        className="shrink-0 p-0.5 rounded hover:bg-surface-hover text-text-muted hover:text-primary transition-colors"
+                        title={expandedCommits.has(`pipeline-${group.buildNumber}`) ? "Collapse" : "Expand"}
+                      >
+                        <ChevronsUpDown size={14} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Row 4: metadata */}
+                {(first.pull_request_id || hash || duration) && (
+                  <div className="mt-2 flex items-center gap-3 flex-wrap">
+                    {!!first.pull_request_id && (
+                      <span className="text-xs text-text-muted">PR #{first.pull_request_id}</span>
+                    )}
+                    {!!hash && (
+                      <div className="flex items-center gap-1">
+                        <GitCommitHorizontal size={12} className="text-text-muted" />
+                        <span className="text-xs font-mono text-text-muted">{hash}</span>
+                      </div>
+                    )}
+                    {!!duration && (
+                      <div className="flex items-center gap-1">
+                        <Clock size={12} className="text-text-muted" />
+                        <span className="text-xs text-text-muted">{duration}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </button>

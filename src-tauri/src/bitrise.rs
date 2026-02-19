@@ -41,7 +41,11 @@ pub struct Build {
     #[serde(default)]
     pub pull_request_target_branch: Option<String>,
     #[serde(default)]
+    pub pull_request_author: Option<String>,
+    #[serde(default)]
     pub pipeline_id: Option<String>,
+    #[serde(default)]
+    pub pipeline_workflow_id: Option<String>,
     #[serde(default, alias = "triggered_workflow")]
     pub workflow: Option<String>,
 }

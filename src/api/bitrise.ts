@@ -72,11 +72,19 @@ export class BitriseClient {
 
     const data = await response.json() as { data: any[]; paging?: { next?: string } };
     console.log('[BitriseClient] Successfully parsed', data.data.length, 'builds');
+    
+    // Debug: log first build to see available fields
+    if (data.data.length > 0) {
+      console.log('[BitriseClient] First build fields:', Object.keys(data.data[0]));
+      console.log('[BitriseClient] First build sample:', data.data[0]);
+    }
 
-    // Map triggered_workflow to workflow (Bitrise API returns triggered_workflow)
+    // Map triggered_workflow to workflow and extract pull_request_author from nested object
     const builds: Build[] = data.data.map((build: any) => ({
       ...build,
       workflow: build.workflow || build.triggered_workflow,
+      pipeline_workflow_id: build.pipeline_workflow_id || build.pipeline_id,
+      pull_request_author: build.pull_request_author || build.original_build_params?.pull_request_author,
     }));
 
     return { builds, next: data.paging?.next };

@@ -16,7 +16,9 @@ export interface Build {
   commit_hash?: string;
   pull_request_id?: number;
   pull_request_target_branch?: string;
+  pull_request_author?: string;
   pipeline_id?: string;
+  pipeline_workflow_id?: string;
   workflow?: string;
 }
 
