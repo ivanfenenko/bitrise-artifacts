@@ -6,6 +6,13 @@
   "permissions": [
     "core:default",
     "shell:allow-open",
+    "shell:allow-execute",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        { "name": "adb", "cmd": "adb", "sidecar": false }
+      ]
+    },
     "fs:default",
     "fs:allow-read",
     {

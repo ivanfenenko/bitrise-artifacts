@@ -1,6 +1,43 @@
 use serde::{Deserialize, Serialize};
 use std::process::Command;
 use apk_info::Apk;
+use std::path::PathBuf;
+use std::sync::OnceLock;
+
+static ADB_PATH: OnceLock<Option<PathBuf>> = OnceLock::new();
+
+fn find_adb() -> Option<PathBuf> {
+    // Check common locations for ADB
+    let potential_paths = vec![
+        // Try which adb first (PATH)
+        which::which("adb").ok(),
+        // Android Studio SDK (macOS)
+        dirs::home_dir().map(|h| h.join("Library/Android/sdk/platform-tools/adb")),
+        // Homebrew Intel
+        Some(PathBuf::from("/usr/local/bin/adb")),
+        // Homebrew Apple Silicon
+        Some(PathBuf::from("/opt/homebrew/bin/adb")),
+        // Common Linux paths
+        Some(PathBuf::from("/usr/bin/adb")),
+        Some(PathBuf::from("/usr/local/bin/adb")),
+    ];
+
+    for path in potential_paths.into_iter().flatten() {
+        if path.exists() {
+            return Some(path);
+        }
+    }
+
+    None
+}
+
+fn get_adb_path() -> Option<&'static PathBuf> {
+    ADB_PATH.get_or_init(find_adb).as_ref()
+}
+
+fn adb_command() -> Option<Command> {
+    get_adb_path().map(|path| Command::new(path))
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Device {
@@ -14,7 +51,7 @@ pub struct Device {
 }
 
 fn get_prop(device_id: &str, prop: &str) -> Option<String> {
-    let output = Command::new("adb")
+    let output = adb_command()?
         .args(["-s", device_id, "shell", "getprop", prop])
         .output()
         .ok()?;
@@ -36,9 +73,10 @@ fn is_emulator(device_id: &str) -> Option<bool> {
 }
 
 pub async fn get_devices() -> anyhow::Result<Vec<Device>> {
-    let output = Command::new("adb")
-        .args(&["devices", "-l"])
-        .output()?;
+    let mut cmd = adb_command()
+        .ok_or_else(|| anyhow::anyhow!("ADB not found. Please install Android SDK Platform Tools or add ADB to PATH"))?;
+    
+    let output = cmd.args(&["devices", "-l"]).output()?;
 
     if !output.status.success() {
         anyhow::bail!("Failed to run adb devices");
@@ -80,7 +118,8 @@ pub async fn get_devices() -> anyhow::Result<Vec<Device>> {
 }
 
 pub async fn install_apk(apk_path: &str, device_id: Option<&str>) -> anyhow::Result<String> {
-    let mut cmd = Command::new("adb");
+    let mut cmd = adb_command()
+        .ok_or_else(|| anyhow::anyhow!("ADB not found. Please install Android SDK Platform Tools or add ADB to PATH"))?;
     
     if let Some(id) = device_id {
         cmd.args(&["-s", id]);
@@ -105,7 +144,8 @@ pub fn get_package_name(apk_path: &str) -> anyhow::Result<String> {
 }
 
 fn launch_package(package_name: &str, device_id: Option<&str>) -> anyhow::Result<String> {
-    let mut cmd = Command::new("adb");
+    let mut cmd = adb_command()
+        .ok_or_else(|| anyhow::anyhow!("ADB not found. Please install Android SDK Platform Tools or add ADB to PATH"))?;
 
     if let Some(id) = device_id {
         cmd.args(["-s", id]);
@@ -131,7 +171,8 @@ fn launch_package(package_name: &str, device_id: Option<&str>) -> anyhow::Result
 }
 
 pub async fn uninstall_apk(package_name: &str, device_id: Option<&str>) -> anyhow::Result<String> {
-    let mut cmd = Command::new("adb");
+    let mut cmd = adb_command()
+        .ok_or_else(|| anyhow::anyhow!("ADB not found. Please install Android SDK Platform Tools or add ADB to PATH"))?;
     
     if let Some(id) = device_id {
         cmd.args(&["-s", id]);
@@ -154,4 +195,12 @@ pub async fn install_and_launch_apk(apk_path: &str, device_id: Option<&str>) -> 
     let package_name = get_package_name(apk_path)?;
     let launch_output = launch_package(&package_name, device_id)?;
     Ok(format!("Installed and launched {}. {} {}", package_name, install_output.trim(), launch_output.trim()))
+}
+
+pub fn check_adb_available() -> bool {
+    get_adb_path().is_some()
+}
+
+pub fn get_adb_location() -> Option<String> {
+    get_adb_path().map(|p| p.display().to_string())
 }

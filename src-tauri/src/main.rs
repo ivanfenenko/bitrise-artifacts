@@ -29,6 +29,8 @@ fn main() {
             commands::install_and_launch_apk,
             commands::uninstall_apk,
             commands::get_package_name,
+            commands::check_adb_available,
+            commands::get_adb_location,
             commands::save_to_downloads,
             commands::open_path,
             commands::save_settings,

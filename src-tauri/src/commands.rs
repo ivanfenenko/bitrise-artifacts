@@ -137,6 +137,16 @@ pub async fn get_package_name(
 }
 
 #[tauri::command]
+pub fn check_adb_available() -> bool {
+    adb::check_adb_available()
+}
+
+#[tauri::command]
+pub fn get_adb_location() -> Option<String> {
+    adb::get_adb_location()
+}
+
+#[tauri::command]
 pub async fn save_to_downloads(
     cachePath: String,
     fileName: String,
